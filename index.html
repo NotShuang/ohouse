@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OHOUSE — MADE FOR FRIENDS.</title>
+<meta name="description" content="OHOUSE. MADE FOR FRIENDS.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Gloria+Hallelujah&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="store.css?v=1783732128">
+<style>
+/* ---------- hero: the site's single animation ----------
+   The canvas is a FIXED background; the title and the shop scroll up OVER it. */
+#outside-loop, #dj-fade {
+  position: fixed; inset: 0; width: 100vw; height: 100vh;
+  object-fit: cover; /* square clips crop top/bottom, always cover full width */
+}
+#outside-loop { z-index: -2; }
+#dj-fade { z-index: -1; opacity: 0; /* scroll drives this from 0 to 1 */ }
+#hero { position: relative; height: 170vh; }
+#hero .title {
+  position: absolute; left: 50%; top: 88vh; transform: translate(-50%, -100%);
+  text-align: center;
+}
+#hero h1 { font-size: clamp(40px, 7vw, 88px); font-weight: 700; letter-spacing: .02em; line-height: 1; }
+#hero .slogan { margin-top: 12px; font-size: clamp(13px, 1.5vw, 17px); letter-spacing: .06em; font-weight: 500; }
+/* shop scrolls over the animation: transparent section, solid white cards */
+#shop { background: transparent; }
+#contact { background: var(--white); }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="brand" href="#">OHOUSE</a>
+  <nav>
+    <a href="#shop">SHOP</a>
+    <a href="#cart" id="cart-link">CART (0)</a>
+    <a href="#contact">CONTACT</a>
+  </nav>
+</header>
+
+<!-- fixed background stack: outside boil loop + dj loop that fades in on scroll -->
+<video id="outside-loop" src="assets/outside-loop.mp4" autoplay muted loop playsinline preload="auto"></video>
+<video id="dj-fade" src="assets/dj-loop.mp4" muted loop playsinline preload="auto"></video>
+<section id="hero">
+  <div class="title">
+    <h1>OHOUSE</h1>
+    <div class="slogan">MADE FOR FRIENDS.</div>
+  </div>
+</section>
+
+<section id="shop">
+  <h2 class="sec-title">SHOP</h2>
+  <div class="products" id="product-grid"></div>
+</section>
+
+<section id="contact">
+  <h2 class="sec-title">CONTACT</h2>
+  <a class="mail" href="mailto:hello@ohouse.com">HELLO@OHOUSE.COM</a>
+  <div class="legal">© 2026 OHOUSE</div>
+</section>
+
+<!-- cart modal -->
+<div id="cart-overlay">
+  <div id="cart-modal">
+    <div class="head"><h3>CART</h3><button id="cart-close">CLOSE</button></div>
+    <div id="cart-lines"></div>
+    <div id="cart-foot">
+      <div id="cart-total">TOTAL — $0</div>
+      <button id="checkout" disabled>CHECKOUT</button>
+    </div>
+  </div>
+</div>
+
+<script src="store.js?v=1783732128"></script>
+<script>
+/* ============ background: outside boil loop, crossfading to dj on scroll ============ */
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const hero = document.getElementById('hero');
+const outsideEl = document.getElementById('outside-loop');
+const djEl = document.getElementById('dj-fade');
+
+function progress() {
+  /* fade completes exactly when the shop section reaches the top of the viewport */
+  return Math.max(0, Math.min(1, (scrollY || document.documentElement.scrollTop) / hero.offsetHeight));
+}
+
+function kick(v) { if (v && v.paused && !REDUCED) v.play().catch(() => {}); }
+
+function update() {
+  const t = progress();
+  const fade = Math.max(0, Math.min(1, (t - 0.65) / 0.35)); /* crossfade window: last 35% */
+  djEl.style.opacity = fade;
+  kick(outsideEl);
+  if (fade > 0) kick(djEl);
+}
+
+/* triple-redundant driver: scroll events + rAF loop + polling fallback */
+addEventListener('scroll', update, { passive: true });
+document.addEventListener('scroll', update, { passive: true, capture: true });
+(function tick() { update(); requestAnimationFrame(tick); })();
+setInterval(update, 300);
+['click', 'touchstart', 'keydown'].forEach(ev => addEventListener(ev, () => kick(outsideEl), { passive: true }));
+if (REDUCED) { outsideEl.pause(); djEl.pause(); }
+</script>
+</body>
+</html>

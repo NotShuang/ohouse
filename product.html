@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OHOUSE — PRODUCT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Gloria+Hallelujah&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="store.css?v=1783732128">
+</head>
+<body>
+
+<!-- full-page looping background: hallway boil loop -->
+<video id="bg-video" src="assets/hallway-loop.mp4" autoplay muted loop playsinline></video>
+<div id="bg-wash"></div>
+
+<header>
+  <a class="brand" href="index.html">OHOUSE</a>
+  <nav>
+    <a href="index.html#shop">SHOP</a>
+    <a href="#cart" id="cart-link">CART (0)</a>
+    <a href="index.html#contact">CONTACT</a>
+  </nav>
+</header>
+
+<main id="pdp">
+  <div>
+    <div class="media"><img id="pdp-img" src="" alt=""></div>
+    <div id="pdp-thumbs"></div>
+  </div>
+  <div>
+    <a class="back" href="index.html#shop">← BACK TO SHOP</a>
+    <h1 id="pdp-name"></h1>
+    <div class="price" id="pdp-price"></div>
+    <p class="desc" id="pdp-desc"></p>
+    <button class="buy" id="pdp-buy">ADD TO CART</button>
+  </div>
+</main>
+
+<!-- cart modal -->
+<div id="cart-overlay">
+  <div id="cart-modal">
+    <div class="head"><h3>CART</h3><button id="cart-close">CLOSE</button></div>
+    <div id="cart-lines"></div>
+    <div id="cart-foot">
+      <div id="cart-total">TOTAL — $0</div>
+      <button id="checkout" disabled>CHECKOUT</button>
+    </div>
+  </div>
+</div>
+
+<script src="store.js?v=1783732128"></script>
+<script>
+const handle = new URLSearchParams(location.search).get('handle');
+let selectedImg = 0;
+function gallery() { const p = CATALOG[handle]; return (p && (p.imgs || [p.img])) || []; }
+
+function showImg(i) {
+  const imgs = gallery();
+  if (!imgs[i]) return;
+  document.getElementById('pdp-img').src = imgs[i];
+  document.querySelectorAll('#pdp-thumbs img').forEach((t, ti) => t.classList.toggle('active', ti === selectedImg));
+}
+
+function renderGallery() {
+  const imgs = gallery();
+  const thumbs = document.getElementById('pdp-thumbs');
+  thumbs.innerHTML = imgs.map((src, i) =>
+    `<img src="${src}" alt="view ${i + 1}" data-i="${i}"${i === selectedImg ? ' class="active"' : ''}>`).join('');
+  showImg(selectedImg);
+}
+
+function renderPdp() {
+  const p = CATALOG[handle];
+  if (!p) return;
+  document.title = `OHOUSE — ${p.name.toUpperCase()}`;
+  renderGallery();
+  document.getElementById('pdp-img').alt = p.name + ' print';
+  document.getElementById('pdp-name').textContent = p.name;
+  document.getElementById('pdp-price').textContent = fmtPrice(p.price) + (isAvailable(p) ? '' : ' — SOLD OUT');
+  document.getElementById('pdp-desc').textContent = p.desc;
+  const buy = document.getElementById('pdp-buy');
+  buy.disabled = !isAvailable(p);
+  buy.textContent = isAvailable(p) ? 'ADD TO CART' : 'SOLD OUT';
+}
+/* ensure the background loop actually plays (autoplay can be blocked) */
+function kickBgVideo() {
+  const v = document.getElementById('bg-video');
+  if (v && v.paused) v.play().catch(() => {});
+}
+['click', 'scroll', 'touchstart', 'keydown'].forEach(ev =>
+  addEventListener(ev, kickBgVideo, { passive: true }));
+setInterval(kickBgVideo, 2000);
+
+document.addEventListener('DOMContentLoaded', () => {
+  kickBgVideo();
+  renderPdp(); /* instant paint from fallback */
+  document.getElementById('pdp-buy').addEventListener('click', () => addToCart(handle));
+
+  /* thumbnails: click to switch the main image */
+  document.getElementById('pdp-thumbs').addEventListener('click', e => {
+    const t = e.target.closest('img[data-i]');
+    if (!t) return;
+    selectedImg = +t.dataset.i;
+    showImg(selectedImg);
+  });
+
+  /* hovering the main image previews the second image; leaving restores */
+  const main = document.getElementById('pdp-img');
+  main.addEventListener('mouseenter', () => { const imgs = gallery(); if (imgs[1]) main.src = imgs[1]; });
+  main.addEventListener('mouseleave', () => showImg(selectedImg));
+});
+/* re-paint with live Shopify data; if the handle doesn't exist even then, go home */
+document.addEventListener('catalog-ready', () => {
+  if (!CATALOG[handle]) { location.replace('index.html#shop'); return; }
+  renderPdp();
+});
+</script>
+</body>
+</html>
