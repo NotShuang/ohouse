@@ -9,6 +9,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Gloria+Hallelujah&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="store.css">
+<style>
+/* home background stack: resting loop + one-shot exit clip */
+#rest-video, #play-video {
+  position: fixed; inset: 0; width: 100vw; height: 100vh;
+  object-fit: cover; z-index: -2;
+}
+#play-video { z-index: -1; visibility: hidden; }
+#play-video.active { visibility: visible; }
+</style>
 </head>
 <body class="home">
 
@@ -21,12 +30,14 @@
   </nav>
 </header>
 
-<!-- home: the 4-frame boil animation is scrubbed by scrolling; the page itself never moves.
-     Past the last frame, we auto-advance to the shop. -->
-<canvas id="frame-canvas"></canvas>
+<!-- resting state: mainpagestatic loops forever; on first scroll, outside.mp4
+     plays through once (normal playback, uninterruptible) then we go to the shop -->
+<video id="rest-video" src="assets/mainpage-loop.mp4" autoplay muted loop playsinline preload="auto"></video>
+<video id="play-video" src="assets/outside-loop.mp4" muted playsinline preload="auto"></video>
 
-<!-- hover hotspots over the artwork (positioned by JS to track the drawn square) -->
-<div class="hotspot" id="hs-door" title=""><span class="sign">Shop</span></div>
+<!-- hover hotspots over the artwork (positioned by JS to track the drawn square);
+     labels are cursor-following tooltips -->
+<div class="hotspot" id="hs-door"><span class="sign">Shop</span></div>
 <div class="hotspot" id="hs-person"><span class="sign">Contact</span></div>
 
 <div id="home-title">
@@ -37,61 +48,42 @@
 
 <script src="store.js"></script>
 <script>
-/* ============ locked scroll scrub over the 4-frame boil ============ */
-const FRAMES = ['frames/outside-1.webp', 'frames/outside-2.webp', 'frames/outside-3.webp', 'frames/outside-4.webp'];
-const STEP = 260;                       /* scroll px per frame */
-const ADVANCE_AT = FRAMES.length * STEP + 240; /* past the last frame -> go to shop */
+const restV = document.getElementById('rest-video');
+const playV = document.getElementById('play-video');
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const canvas = document.getElementById('frame-canvas');
-const ctx = canvas.getContext('2d');
-const DPR = Math.min(2, devicePixelRatio || 1);
-const imgs = new Array(FRAMES.length).fill(null);
-let acc = 0, lastDrawn = -1, advancing = false;
+/* keep the resting loop alive (autoplay can be blocked) */
+function kickRest() { if (!REDUCED && restV.paused && !triggered) restV.play().catch(() => {}); }
+['click', 'touchstart', 'keydown', 'mousemove'].forEach(ev => addEventListener(ev, kickRest, { passive: true }));
+setInterval(kickRest, 2000);
 
-function sizeCanvas() { canvas.width = innerWidth * DPR; canvas.height = innerHeight * DPR; lastDrawn = -1; draw(); positionHotspots(); }
-
-function frameIndex() { return Math.min(FRAMES.length - 1, Math.floor(acc / STEP)); }
-
-function draw() {
-  const i = REDUCED ? 0 : frameIndex();
-  if (i === lastDrawn) return;
-  const im = imgs[i] || imgs.find(Boolean);
-  if (!im) return;
-  lastDrawn = i;
-  const W = canvas.width, H = canvas.height;
-  ctx.fillStyle = '#efefeb'; ctx.fillRect(0, 0, W, H);
-  const s = Math.max(W / im.width, H / im.height); /* cover: always full width */
-  const dw = im.width * s, dh = im.height * s;
-  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(im, (W - dw) / 2, (H - dh) / 2, dw, dh);
+/* ---------- scroll → play outside.mp4 once → shop ---------- */
+let triggered = false, navigated = false;
+function goShop() { if (navigated) return; navigated = true; location.href = 'shop.html'; }
+function trigger() {
+  if (triggered || REDUCED) { if (REDUCED) goShop(); return; }
+  triggered = true;
+  playV.classList.add('active');
+  restV.pause();
+  playV.currentTime = 0;
+  playV.addEventListener('ended', goShop, { once: true });
+  playV.play().catch(() => { /* if playback is blocked, don't strand the user */ setTimeout(goShop, 1200); });
+  /* safety net: navigate even if 'ended' never fires */
+  const dur = (isFinite(playV.duration) && playV.duration) || 1;
+  setTimeout(goShop, dur * 1000 + 1600);
 }
 
-function bump(delta) {
-  if (REDUCED || advancing) return;
-  acc = Math.max(0, Math.min(ADVANCE_AT + 10, acc + delta));
-  draw();
-  if (acc >= ADVANCE_AT) {
-    advancing = true;
-    location.href = 'shop.html';
-  }
-}
-
-addEventListener('wheel', e => bump(e.deltaY), { passive: true });
+addEventListener('wheel', e => { if (e.deltaY > 0) trigger(); }, { passive: true });
 addEventListener('keydown', e => {
-  if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') bump(STEP);
-  if (e.key === 'ArrowUp' || e.key === 'PageUp') bump(-STEP);
+  if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') trigger();
 });
 let touchY = null;
 addEventListener('touchstart', e => { touchY = e.touches[0].clientY; }, { passive: true });
 addEventListener('touchmove', e => {
-  if (touchY === null) return;
-  bump((touchY - e.touches[0].clientY) * 2);
-  touchY = e.touches[0].clientY;
+  if (touchY !== null && touchY - e.touches[0].clientY > 24) trigger(); /* swipe up = scroll down */
 }, { passive: true });
 
 /* ---------- hotspots track the cover-rendered square artwork ---------- */
-/* regions in artwork coordinates (fraction of the square) */
 const HOTSPOTS = [
   { el: 'hs-door',   x: 0.17, y: 0.38, w: 0.26, h: 0.50, href: 'shop.html' },
   { el: 'hs-person', x: 0.42, y: 0.60, w: 0.21, h: 0.30, href: 'contact.html' }
@@ -107,16 +99,18 @@ function positionHotspots() {
     el.style.height = (h.h * side) + 'px';
   });
 }
-HOTSPOTS.forEach(h => document.getElementById(h.el).addEventListener('click', () => location.href = h.href));
-addEventListener('resize', sizeCanvas);
-
-/* load frames then start */
-FRAMES.forEach((src, i) => {
-  const im = new Image();
-  im.onload = () => { imgs[i] = im; if (i === 0 || lastDrawn === -1) { lastDrawn = -1; draw(); } };
-  im.src = src;
+HOTSPOTS.forEach(h => {
+  const el = document.getElementById(h.el);
+  const sign = el.querySelector('.sign');
+  el.addEventListener('click', () => location.href = h.href);
+  /* tooltip follows the cursor, offset to the bottom-right */
+  el.addEventListener('mousemove', e => {
+    sign.style.left = (e.clientX + 14) + 'px';
+    sign.style.top = (e.clientY + 20) + 'px';
+  });
 });
-sizeCanvas();
+addEventListener('resize', positionHotspots);
+positionHotspots();
 </script>
 </body>
 </html>
