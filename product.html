@@ -7,20 +7,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Gloria+Hallelujah&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="store.css?v=1783732128">
+<link rel="stylesheet" href="store.css">
 </head>
 <body>
 
-<!-- full-page looping background: hallway boil loop -->
+<!-- persistent hand-drawn loop: hallway boil on the right half -->
 <video id="bg-video" src="assets/hallway-loop.mp4" autoplay muted loop playsinline></video>
 <div id="bg-wash"></div>
 
-<header>
+<header class="solid">
   <a class="brand" href="index.html">OHOUSE</a>
   <nav>
-    <a href="index.html#shop">SHOP</a>
+    <a href="shop.html">SHOP</a>
     <a href="#cart" id="cart-link">CART (0)</a>
-    <a href="index.html#contact">CONTACT</a>
+    <a href="contact.html">CONTACT</a>
   </nav>
 </header>
 
@@ -30,7 +30,7 @@
     <div id="pdp-thumbs"></div>
   </div>
   <div>
-    <a class="back" href="index.html#shop">← BACK TO SHOP</a>
+    <a class="back" href="shop.html">← BACK TO SHOP</a>
     <h1 id="pdp-name"></h1>
     <div class="price" id="pdp-price"></div>
     <p class="desc" id="pdp-desc"></p>
@@ -38,19 +38,7 @@
   </div>
 </main>
 
-<!-- cart modal -->
-<div id="cart-overlay">
-  <div id="cart-modal">
-    <div class="head"><h3>CART</h3><button id="cart-close">CLOSE</button></div>
-    <div id="cart-lines"></div>
-    <div id="cart-foot">
-      <div id="cart-total">TOTAL — $0</div>
-      <button id="checkout" disabled>CHECKOUT</button>
-    </div>
-  </div>
-</div>
-
-<script src="store.js?v=1783732128"></script>
+<script src="store.js"></script>
 <script>
 const handle = new URLSearchParams(location.search).get('handle');
 let selectedImg = 0;
@@ -84,7 +72,8 @@ function renderPdp() {
   buy.disabled = !isAvailable(p);
   buy.textContent = isAvailable(p) ? 'ADD TO CART' : 'SOLD OUT';
 }
-/* ensure the background loop actually plays (autoplay can be blocked) */
+
+/* keep the background loop alive (autoplay can be blocked) */
 function kickBgVideo() {
   const v = document.getElementById('bg-video');
   if (v && v.paused) v.play().catch(() => {});
@@ -111,9 +100,9 @@ document.addEventListener('DOMContentLoaded', () => {
   main.addEventListener('mouseenter', () => { const imgs = gallery(); if (imgs[1]) main.src = imgs[1]; });
   main.addEventListener('mouseleave', () => showImg(selectedImg));
 });
-/* re-paint with live Shopify data; if the handle doesn't exist even then, go home */
+/* re-paint with live Shopify data; if the handle doesn't exist even then, go to the shop */
 document.addEventListener('catalog-ready', () => {
-  if (!CATALOG[handle]) { location.replace('index.html#shop'); return; }
+  if (!CATALOG[handle]) { location.replace('shop.html'); return; }
   renderPdp();
 });
 </script>

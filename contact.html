@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OHOUSE — CONTACT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Gloria+Hallelujah&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="store.css">
+</head>
+<body>
+
+<!-- soft looping sketch background -->
+<video class="bg-loop" src="assets/outside-loop.mp4" autoplay muted loop playsinline></video>
+
+<header class="solid">
+  <a class="brand" href="index.html">OHOUSE</a>
+  <nav>
+    <a href="shop.html">SHOP</a>
+    <a href="#cart" id="cart-link">CART (0)</a>
+    <a href="contact.html">CONTACT</a>
+  </nav>
+</header>
+
+<main class="page" id="contact-page">
+  <h2 class="page-title">CONTACT</h2>
+  <a class="mail" href="mailto:hello@ohouse.com">HELLO@OHOUSE.COM</a>
+  <div class="legal">© 2026 OHOUSE</div>
+</main>
+
+<script src="store.js"></script>
+<script>
+function kickLoop() { const v = document.querySelector('.bg-loop'); if (v && v.paused) v.play().catch(() => {}); }
+['click', 'scroll', 'touchstart', 'keydown'].forEach(ev => addEventListener(ev, kickLoop, { passive: true }));
+setInterval(kickLoop, 2000);
+</script>
+</body>
+</html>

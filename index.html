@@ -8,102 +8,115 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Gloria+Hallelujah&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="store.css?v=1783732128">
-<style>
-/* ---------- hero: the site's single animation ----------
-   The canvas is a FIXED background; the title and the shop scroll up OVER it. */
-#outside-loop, #dj-fade {
-  position: fixed; inset: 0; width: 100vw; height: 100vh;
-  object-fit: cover; /* square clips crop top/bottom, always cover full width */
-}
-#outside-loop { z-index: -2; }
-#dj-fade { z-index: -1; opacity: 0; /* scroll drives this from 0 to 1 */ }
-#hero { position: relative; height: 170vh; }
-#hero .title {
-  position: absolute; left: 50%; top: 88vh; transform: translate(-50%, -100%);
-  text-align: center;
-}
-#hero h1 { font-size: clamp(40px, 7vw, 88px); font-weight: 700; letter-spacing: .02em; line-height: 1; }
-#hero .slogan { margin-top: 12px; font-size: clamp(13px, 1.5vw, 17px); letter-spacing: .06em; font-weight: 500; }
-/* shop scrolls over the animation: transparent section, solid white cards */
-#shop { background: transparent; }
-#contact { background: var(--white); }
-</style>
+<link rel="stylesheet" href="store.css">
 </head>
-<body>
+<body class="home">
 
 <header>
-  <a class="brand" href="#">OHOUSE</a>
+  <a class="brand" href="index.html">OHOUSE</a>
   <nav>
-    <a href="#shop">SHOP</a>
+    <a href="shop.html">SHOP</a>
     <a href="#cart" id="cart-link">CART (0)</a>
-    <a href="#contact">CONTACT</a>
+    <a href="contact.html">CONTACT</a>
   </nav>
 </header>
 
-<!-- fixed background stack: outside boil loop + dj loop that fades in on scroll -->
-<video id="outside-loop" src="assets/outside-loop.mp4" autoplay muted loop playsinline preload="auto"></video>
-<video id="dj-fade" src="assets/dj-loop.mp4" muted loop playsinline preload="auto"></video>
-<section id="hero">
-  <div class="title">
-    <h1>OHOUSE</h1>
-    <div class="slogan">MADE FOR FRIENDS.</div>
-  </div>
-</section>
+<!-- home: the 4-frame boil animation is scrubbed by scrolling; the page itself never moves.
+     Past the last frame, we auto-advance to the shop. -->
+<canvas id="frame-canvas"></canvas>
 
-<section id="shop">
-  <h2 class="sec-title">SHOP</h2>
-  <div class="products" id="product-grid"></div>
-</section>
+<!-- hover hotspots over the artwork (positioned by JS to track the drawn square) -->
+<div class="hotspot" id="hs-door" title=""><span class="sign">Shop</span></div>
+<div class="hotspot" id="hs-person"><span class="sign">Contact</span></div>
 
-<section id="contact">
-  <h2 class="sec-title">CONTACT</h2>
-  <a class="mail" href="mailto:hello@ohouse.com">HELLO@OHOUSE.COM</a>
-  <div class="legal">© 2026 OHOUSE</div>
-</section>
-
-<!-- cart modal -->
-<div id="cart-overlay">
-  <div id="cart-modal">
-    <div class="head"><h3>CART</h3><button id="cart-close">CLOSE</button></div>
-    <div id="cart-lines"></div>
-    <div id="cart-foot">
-      <div id="cart-total">TOTAL — $0</div>
-      <button id="checkout" disabled>CHECKOUT</button>
-    </div>
-  </div>
+<div id="home-title">
+  <h1>OHOUSE</h1>
+  <div class="slogan">MADE FOR FRIENDS.</div>
+  <div class="hint">( scroll )</div>
 </div>
 
-<script src="store.js?v=1783732128"></script>
+<script src="store.js"></script>
 <script>
-/* ============ background: outside boil loop, crossfading to dj on scroll ============ */
+/* ============ locked scroll scrub over the 4-frame boil ============ */
+const FRAMES = ['frames/outside-1.webp', 'frames/outside-2.webp', 'frames/outside-3.webp', 'frames/outside-4.webp'];
+const STEP = 260;                       /* scroll px per frame */
+const ADVANCE_AT = FRAMES.length * STEP + 240; /* past the last frame -> go to shop */
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const hero = document.getElementById('hero');
-const outsideEl = document.getElementById('outside-loop');
-const djEl = document.getElementById('dj-fade');
 
-function progress() {
-  /* fade completes exactly when the shop section reaches the top of the viewport */
-  return Math.max(0, Math.min(1, (scrollY || document.documentElement.scrollTop) / hero.offsetHeight));
+const canvas = document.getElementById('frame-canvas');
+const ctx = canvas.getContext('2d');
+const DPR = Math.min(2, devicePixelRatio || 1);
+const imgs = new Array(FRAMES.length).fill(null);
+let acc = 0, lastDrawn = -1, advancing = false;
+
+function sizeCanvas() { canvas.width = innerWidth * DPR; canvas.height = innerHeight * DPR; lastDrawn = -1; draw(); positionHotspots(); }
+
+function frameIndex() { return Math.min(FRAMES.length - 1, Math.floor(acc / STEP)); }
+
+function draw() {
+  const i = REDUCED ? 0 : frameIndex();
+  if (i === lastDrawn) return;
+  const im = imgs[i] || imgs.find(Boolean);
+  if (!im) return;
+  lastDrawn = i;
+  const W = canvas.width, H = canvas.height;
+  ctx.fillStyle = '#efefeb'; ctx.fillRect(0, 0, W, H);
+  const s = Math.max(W / im.width, H / im.height); /* cover: always full width */
+  const dw = im.width * s, dh = im.height * s;
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(im, (W - dw) / 2, (H - dh) / 2, dw, dh);
 }
 
-function kick(v) { if (v && v.paused && !REDUCED) v.play().catch(() => {}); }
-
-function update() {
-  const t = progress();
-  const fade = Math.max(0, Math.min(1, (t - 0.65) / 0.35)); /* crossfade window: last 35% */
-  djEl.style.opacity = fade;
-  kick(outsideEl);
-  if (fade > 0) kick(djEl);
+function bump(delta) {
+  if (REDUCED || advancing) return;
+  acc = Math.max(0, Math.min(ADVANCE_AT + 10, acc + delta));
+  draw();
+  if (acc >= ADVANCE_AT) {
+    advancing = true;
+    location.href = 'shop.html';
+  }
 }
 
-/* triple-redundant driver: scroll events + rAF loop + polling fallback */
-addEventListener('scroll', update, { passive: true });
-document.addEventListener('scroll', update, { passive: true, capture: true });
-(function tick() { update(); requestAnimationFrame(tick); })();
-setInterval(update, 300);
-['click', 'touchstart', 'keydown'].forEach(ev => addEventListener(ev, () => kick(outsideEl), { passive: true }));
-if (REDUCED) { outsideEl.pause(); djEl.pause(); }
+addEventListener('wheel', e => bump(e.deltaY), { passive: true });
+addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') bump(STEP);
+  if (e.key === 'ArrowUp' || e.key === 'PageUp') bump(-STEP);
+});
+let touchY = null;
+addEventListener('touchstart', e => { touchY = e.touches[0].clientY; }, { passive: true });
+addEventListener('touchmove', e => {
+  if (touchY === null) return;
+  bump((touchY - e.touches[0].clientY) * 2);
+  touchY = e.touches[0].clientY;
+}, { passive: true });
+
+/* ---------- hotspots track the cover-rendered square artwork ---------- */
+/* regions in artwork coordinates (fraction of the square) */
+const HOTSPOTS = [
+  { el: 'hs-door',   x: 0.17, y: 0.38, w: 0.26, h: 0.50, href: 'shop.html' },
+  { el: 'hs-person', x: 0.42, y: 0.60, w: 0.21, h: 0.30, href: 'contact.html' }
+];
+function positionHotspots() {
+  const side = Math.max(innerWidth, innerHeight);
+  const ox = (innerWidth - side) / 2, oy = (innerHeight - side) / 2;
+  HOTSPOTS.forEach(h => {
+    const el = document.getElementById(h.el);
+    el.style.left = (ox + h.x * side) + 'px';
+    el.style.top = (oy + h.y * side) + 'px';
+    el.style.width = (h.w * side) + 'px';
+    el.style.height = (h.h * side) + 'px';
+  });
+}
+HOTSPOTS.forEach(h => document.getElementById(h.el).addEventListener('click', () => location.href = h.href));
+addEventListener('resize', sizeCanvas);
+
+/* load frames then start */
+FRAMES.forEach((src, i) => {
+  const im = new Image();
+  im.onload = () => { imgs[i] = im; if (i === 0 || lastDrawn === -1) { lastDrawn = -1; draw(); } };
+  im.src = src;
+});
+sizeCanvas();
 </script>
 </body>
 </html>

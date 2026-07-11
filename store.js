@@ -1,12 +1,9 @@
-/* OHOUSE shared store logic: live Shopify catalog, persistent cart, cart modal.
-   ————————————————————————————————————————————————————————————————————————
-   LIVE CATALOG: paste your Storefront API access token into STOREFRONT_TOKEN
-   below (Shopify admin → Settings → Apps and sales channels → Develop apps →
-   create app → Configuration: enable Storefront API → API credentials →
-   Storefront API access token). Once set, products, names, prices, images and
-   descriptions come straight from Shopify on every page load. Until then the
-   embedded FALLBACK_CATALOG below is used.
-   CHECKOUT: builds a Shopify cart permalink to hosted checkout. */
+/* OHOUSE shared store logic: live Shopify catalog, persistent cart,
+   slide-out cart drawer, email signup popup.
+   ————————————————————————————————————————————————————————————————
+   Catalog loads live from the Shopify Storefront API (public token).
+   Checkout hands the cart to Shopify's hosted checkout via cart permalink.
+   Newsletter signup creates a SUBSCRIBED customer via the Storefront API. */
 
 const SHOPIFY_DOMAIN = 'by1rr0-yf.myshopify.com';
 const STOREFRONT_TOKEN = '7bbfe1c0cf0bfbd15d38274986b08bc3'; /* Headless app public access token */
@@ -61,7 +58,6 @@ const catalogReady = (async () => {
       products(first: 50, query: "vendor:OHOUSE") {
         nodes {
           handle title description
-          featuredImage { url }
           images(first: 3) { nodes { url } }
           variants(first: 1) { nodes { id price { amount } availableForSale } }
         }
@@ -103,14 +99,13 @@ const catalogReady = (async () => {
 })();
 
 const fmtPrice = n => '$' + (Number.isInteger(+n) ? +n : (+n).toFixed(2));
+const isAvailable = p => p && p.available !== false;
 
 /* ---------- cart state (localStorage so it survives page changes) ---------- */
 const CART_KEY = 'ohouse-cart';
 let cart = [];
 try { cart = JSON.parse(localStorage.getItem(CART_KEY)) || []; } catch (e) { cart = []; }
 function saveCart() { try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch (e) {} }
-
-const isAvailable = p => p && p.available !== false;
 
 function addToCart(handle) {
   if (!isAvailable(CATALOG[handle])) return;
@@ -119,50 +114,103 @@ function addToCart(handle) {
   else cart.push({ handle, qty: 1 });
   saveCart();
   renderCart();
-  openCart();
+  openDrawer();
 }
 
-/* ---------- cart modal ---------- */
+/* ---------- injected chrome: cart drawer + signup popup ---------- */
+function injectChrome() {
+  document.body.insertAdjacentHTML('beforeend', `
+  <div id="drawer-overlay"></div>
+  <aside id="cart-drawer" aria-label="Cart">
+    <div class="drawer-head"><h3>CART</h3><button id="drawer-close" aria-label="Close cart">✕</button></div>
+    <div id="drawer-body">
+      <div id="drawer-lines"></div>
+      <div id="drawer-upsell"></div>
+    </div>
+    <div class="drawer-foot">
+      <button id="drawer-checkout" disabled>CHECKOUT&nbsp;&nbsp;·&nbsp;&nbsp;$0</button>
+    </div>
+  </aside>
+  <div id="signup-overlay">
+    <div id="signup-pop">
+      <button id="signup-close" aria-label="Close">✕</button>
+      <h3>JOIN THE FRIENDS LIST</h3>
+      <p>drops, restocks and doodles. no spam — made for friends.</p>
+      <form id="signup-form">
+        <input id="signup-email" type="email" required placeholder="your@email.com">
+        <button id="signup-submit" type="submit">SIGN UP</button>
+      </form>
+      <div id="signup-msg"></div>
+    </div>
+  </div>`);
+}
+
+/* ---------- cart drawer ---------- */
+function openDrawer() { renderCart(); document.body.classList.add('drawer-open'); }
+function closeDrawer() { document.body.classList.remove('drawer-open'); }
+
 function renderCart() {
-  const linesEl = document.getElementById('cart-lines');
-  const totalEl = document.getElementById('cart-total');
+  const linesEl = document.getElementById('drawer-lines');
+  const upsellEl = document.getElementById('drawer-upsell');
   const linkEl = document.getElementById('cart-link');
-  const checkoutEl = document.getElementById('checkout');
+  const checkoutEl = document.getElementById('drawer-checkout');
   if (!linesEl) return;
 
-  linesEl.innerHTML = '';
   let hasSoldOut = false;
   if (cart.length === 0) {
-    linesEl.innerHTML = '<div class="cart-empty">YOUR CART IS EMPTY.</div>';
+    linesEl.innerHTML = '<div class="drawer-empty">YOUR CART IS EMPTY.</div>';
   } else {
-    cart.forEach((item, idx) => {
+    linesEl.innerHTML = cart.map((item, idx) => {
       const p = CATALOG[item.handle];
-      if (!p) return;
+      if (!p) return '';
       const soldOut = !isAvailable(p);
       if (soldOut) hasSoldOut = true;
-      const row = document.createElement('div');
-      row.className = 'cart-line';
-      row.innerHTML = `<span class="n">${p.name}${soldOut ? ' <span class="oos">— SOLD OUT, PLEASE REMOVE</span>' : ''}</span>
-        <span class="q">×${item.qty} — ${fmtPrice(p.price * item.qty)}</span>
-        <button class="rm" data-i="${idx}">REMOVE</button>`;
-      linesEl.appendChild(row);
-    });
+      return `
+      <div class="dline">
+        <img src="${p.img}" alt="${p.name}">
+        <div class="din">
+          <div class="dname">${p.name}${soldOut ? ' <span class="oos">— SOLD OUT</span>' : ''}</div>
+          <div class="dprice">${fmtPrice(p.price)}</div>
+          <div class="drow">
+            <span class="qty-step">
+              <button data-q="-1" data-i="${idx}" aria-label="Decrease">−</button>
+              <span>${item.qty}</span>
+              <button data-q="1" data-i="${idx}" aria-label="Increase">+</button>
+            </span>
+            <button class="rm" data-i="${idx}">Remove</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
   }
+
+  /* COMPLETE WITH: first available product not already in the cart */
+  const inCart = new Set(cart.map(i => i.handle));
+  const up = Object.entries(CATALOG).find(([h, p]) => !inCart.has(h) && isAvailable(p));
+  upsellEl.innerHTML = (cart.length && up) ? `
+    <div class="up-label">COMPLETE WITH</div>
+    <div class="uline">
+      <img src="${up[1].img}" alt="${up[1].name}">
+      <div>
+        <div class="uname">${up[1].name}</div>
+        <div class="uprice">${fmtPrice(up[1].price)}</div>
+        <button class="uadd" data-handle="${up[0]}">Add to cart</button>
+      </div>
+    </div>` : '';
+
   const count = cart.reduce((s, i) => s + i.qty, 0);
   const total = cart.reduce((s, i) => s + i.qty * (CATALOG[i.handle] ? CATALOG[i.handle].price : 0), 0);
   if (linkEl) linkEl.textContent = `CART (${count})`;
-  if (totalEl) totalEl.textContent = `TOTAL — ${fmtPrice(total)}`;
-  if (checkoutEl) checkoutEl.disabled = cart.length === 0 || hasSoldOut;
+  if (checkoutEl) {
+    checkoutEl.innerHTML = `CHECKOUT&nbsp;&nbsp;·&nbsp;&nbsp;${fmtPrice(total)}`;
+    checkoutEl.disabled = cart.length === 0 || hasSoldOut;
+  }
 }
-
-function openCart() { document.getElementById('cart-overlay').classList.add('open'); }
-function closeCart() { document.getElementById('cart-overlay').classList.remove('open'); }
 
 /* ---------- shop grid (rendered from CATALOG so new products appear) ---------- */
 function renderGrid() {
   const grid = document.getElementById('product-grid');
   if (!grid) return;
-  /* listing shows only the name above the artwork (yuremane-style) */
   grid.innerHTML = Object.entries(CATALOG).map(([handle, p]) => `
     <a class="product${isAvailable(p) ? '' : ' soldout'}" href="product.html?handle=${handle}">
       <div class="name">${p.name}${isAvailable(p) ? '' : ' — SOLD OUT'}</div>
@@ -173,30 +221,75 @@ function renderGrid() {
     </a>`).join('');
 }
 
+/* ---------- email signup (Shopify Storefront customerCreate) ---------- */
+const SIGNUP_KEY = 'ohouse-signup-done';
+function maybeShowSignup() {
+  try { if (localStorage.getItem(SIGNUP_KEY)) return; } catch (e) {}
+  setTimeout(() => document.getElementById('signup-overlay').classList.add('open'), 600);
+}
+function dismissSignup() {
+  document.getElementById('signup-overlay').classList.remove('open');
+  try { localStorage.setItem(SIGNUP_KEY, '1'); } catch (e) {}
+}
+async function submitSignup(email) {
+  const msg = document.getElementById('signup-msg');
+  msg.textContent = '…';
+  const pass = 'ohs-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  try {
+    const r = await fetch(STOREFRONT_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Shopify-Storefront-Access-Token': STOREFRONT_TOKEN },
+      body: JSON.stringify({
+        query: `mutation($input: CustomerCreateInput!) {
+          customerCreate(input: $input) { customer { id } customerUserErrors { code message } }
+        }`,
+        variables: { input: { email, password: pass, acceptsMarketing: true } }
+      })
+    });
+    const j = await r.json();
+    const errs = j.data && j.data.customerCreate && j.data.customerCreate.customerUserErrors || [];
+    if (errs.length && errs[0].code !== 'TAKEN') {
+      msg.textContent = errs[0].message || 'Something went wrong — try again.';
+      return;
+    }
+    /* TAKEN means the email already exists — treat as subscribed */
+    msg.textContent = 'WELCOME, FRIEND. ✓';
+    setTimeout(dismissSignup, 1600);
+  } catch (e) {
+    msg.textContent = 'Network hiccup — try again.';
+  }
+}
+
 /* ---------- wiring ---------- */
 document.addEventListener('DOMContentLoaded', async () => {
-  const overlay = document.getElementById('cart-overlay');
+  injectChrome();
+
   const linkEl = document.getElementById('cart-link');
+  if (linkEl) linkEl.addEventListener('click', e => { e.preventDefault(); openDrawer(); });
+  document.getElementById('drawer-close').addEventListener('click', closeDrawer);
+  document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeDrawer(); dismissSignup(); } });
 
-  if (linkEl) linkEl.addEventListener('click', e => { e.preventDefault(); renderCart(); openCart(); });
-  const closeBtn = document.getElementById('cart-close');
-  if (closeBtn) closeBtn.addEventListener('click', closeCart);
-  if (overlay) overlay.addEventListener('click', e => { if (e.target === overlay) closeCart(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCart(); });
-
-  const linesEl = document.getElementById('cart-lines');
-  if (linesEl) linesEl.addEventListener('click', e => {
-    if (e.target.matches('.rm')) { cart.splice(+e.target.dataset.i, 1); saveCart(); renderCart(); }
+  /* drawer interactions: qty steppers, remove, upsell add */
+  document.getElementById('cart-drawer').addEventListener('click', e => {
+    const q = e.target.closest('[data-q]');
+    if (q) {
+      const i = +q.dataset.i;
+      cart[i].qty += +q.dataset.q;
+      if (cart[i].qty <= 0) cart.splice(i, 1);
+      saveCart(); renderCart(); return;
+    }
+    const rm = e.target.closest('.rm');
+    if (rm) { cart.splice(+rm.dataset.i, 1); saveCart(); renderCart(); return; }
+    const ua = e.target.closest('.uadd');
+    if (ua) { addToCart(ua.dataset.handle); return; }
+    if (e.target.id === 'drawer-checkout' && !e.target.disabled) {
+      const items = cart.map(i => `${CATALOG[i.handle].variantId}:${i.qty}`).join(',');
+      window.location.href = `https://${SHOPIFY_DOMAIN}/cart/${items}`;
+    }
   });
 
-  const checkoutEl = document.getElementById('checkout');
-  if (checkoutEl) checkoutEl.addEventListener('click', () => {
-    if (cart.length === 0) return;
-    const items = cart.map(i => `${CATALOG[i.handle].variantId}:${i.qty}`).join(',');
-    window.location.href = `https://${SHOPIFY_DOMAIN}/cart/${items}`;
-  });
-
-  /* ADD TO CART buttons (delegated — grid is rendered dynamically) */
+  /* ADD TO CART buttons anywhere (delegated) */
   document.addEventListener('click', e => {
     const btn = e.target.closest('.buy[data-handle]');
     if (!btn) return;
@@ -205,10 +298,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     addToCart(btn.dataset.handle);
   });
 
+  /* signup popup */
+  document.getElementById('signup-close').addEventListener('click', dismissSignup);
+  document.getElementById('signup-overlay').addEventListener('click', e => {
+    if (e.target.id === 'signup-overlay') dismissSignup();
+  });
+  document.getElementById('signup-form').addEventListener('submit', e => {
+    e.preventDefault();
+    submitSignup(document.getElementById('signup-email').value.trim());
+  });
+  maybeShowSignup();
+
   renderGrid();      /* instant paint from fallback */
   renderCart();
   await catalogReady;
-  renderGrid();      /* re-paint with live Shopify data once loaded */
+  renderGrid();      /* re-paint with live Shopify data */
   renderCart();
   document.dispatchEvent(new Event('catalog-ready'));
 });
