@@ -68,18 +68,35 @@ function trigger() {
   playV.currentTime = 0;
   playV.addEventListener('ended', goShop, { once: true });
   playV.play().catch(() => { /* if playback is blocked, don't strand the user */ setTimeout(goShop, 1200); });
-  /* safety net: navigate even if 'ended' never fires */
-  const dur = (isFinite(playV.duration) && playV.duration) || 1;
-  setTimeout(goShop, dur * 1000 + 1600);
+  /* safety net: navigate even if 'ended' never fires; wait for real duration
+     so a slow metadata load can't cut the clip short */
+  const arm = () => setTimeout(goShop, playV.duration * 1000 + 1600);
+  if (isFinite(playV.duration) && playV.duration) arm();
+  else playV.addEventListener('loadedmetadata', arm, { once: true });
+  setTimeout(goShop, 10000); /* absolute cap if metadata never arrives */
 }
 
-addEventListener('wheel', e => { if (e.deltaY > 0) trigger(); }, { passive: true });
+/* SHOP nav link plays the same exit animation before navigating */
+document.querySelectorAll('nav a[href="shop.html"]').forEach(a => {
+  a.addEventListener('click', e => { e.preventDefault(); trigger(); });
+});
+
+/* gestures aimed at an open drawer/popup must not start the exit animation */
+function overlayOpen() {
+  const signup = document.getElementById('signup-overlay');
+  return document.body.classList.contains('drawer-open') ||
+         (signup && signup.classList.contains('open'));
+}
+
+addEventListener('wheel', e => { if (e.deltaY > 0 && !overlayOpen()) trigger(); }, { passive: true });
 addEventListener('keydown', e => {
+  if (overlayOpen() || (e.target.closest && e.target.closest('input, textarea'))) return;
   if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') trigger();
 });
 let touchY = null;
 addEventListener('touchstart', e => { touchY = e.touches[0].clientY; }, { passive: true });
 addEventListener('touchmove', e => {
+  if (overlayOpen()) return;
   if (touchY !== null && touchY - e.touches[0].clientY > 24) trigger(); /* swipe up = scroll down */
 }, { passive: true });
 
@@ -102,7 +119,10 @@ function positionHotspots() {
 HOTSPOTS.forEach(h => {
   const el = document.getElementById(h.el);
   const sign = el.querySelector('.sign');
-  el.addEventListener('click', () => location.href = h.href);
+  el.addEventListener('click', () => {
+    if (h.href === 'shop.html') trigger();
+    else location.href = h.href;
+  });
   /* tooltip follows the cursor, offset to the bottom-right */
   el.addEventListener('mousemove', e => {
     sign.style.left = (e.clientX + 14) + 'px';

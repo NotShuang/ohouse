@@ -312,6 +312,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderGrid();      /* instant paint from fallback */
   renderCart();
   await catalogReady;
+  /* drop cart lines whose product no longer exists, or checkout would throw */
+  const pruned = cart.filter(i => CATALOG[i.handle]);
+  if (pruned.length !== cart.length) { cart = pruned; saveCart(); }
   renderGrid();      /* re-paint with live Shopify data */
   renderCart();
   document.dispatchEvent(new Event('catalog-ready'));

@@ -29,6 +29,11 @@ header .brand { font-weight: 700; font-size: 16px; letter-spacing: .04em; text-d
 header nav { display: flex; gap: 26px; }
 header nav a { font-size: 13px; letter-spacing: .06em; text-decoration: none; font-weight: 500; }
 header nav a:hover { text-decoration: underline; }
+@media (max-width: 480px) {
+  header { padding: 14px 4vw; }
+  header nav { gap: 13px; }
+  header nav a { font-size: 11px; letter-spacing: .03em; }
+}
 
 /* ---------- full-viewport pages ---------- */
 .page { min-height: 100vh; padding: 120px 5vw 80px; }
@@ -194,9 +199,9 @@ body.drawer-open #cart-drawer { transform: none; }
 }
 #signup-pop h3 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
 #signup-pop p { font-size: 13px; color: var(--grey-mid); margin-bottom: 22px; }
-#signup-form { display: flex; gap: 10px; }
+#signup-form { display: flex; gap: 10px; flex-wrap: wrap; }
 #signup-email {
-  flex: 1; padding: 12px 14px; font-family: var(--font); font-size: 14px;
+  flex: 1; min-width: 180px; padding: 12px 14px; font-family: var(--font); font-size: 14px;
   border: 1px solid var(--black); border-radius: 8px; outline: none;
 }
 #signup-submit {
