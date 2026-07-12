@@ -16,3 +16,4 @@ loads live from the Storefront API; checkout is Shopify-hosted. The token in
 ## Deploy
 Any static host: point it at this folder. No build.
 Locally: `python3 -m http.server 8081` and open http://localhost:8081.
+  
