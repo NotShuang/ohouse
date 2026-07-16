@@ -9,12 +9,15 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Gloria+Hallelujah&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="store.css">
 </head>
-<body>
+<body class="shop">
 
-<!-- soft looping sketch background carries the aesthetic through the shop -->
-<video class="bg-loop" src="assets/dj-loop.mp4" autoplay muted loop playsinline></video>
+<!-- the product-list animation is drawn larger than the viewport and anchored
+     so the beanie sits dead-center on screen; the live Shopify product image
+     is positioned exactly over the drawn beanie (mapping measured from the
+     animation frames — see store.css body.shop / #beanie-spot) -->
+<video class="bg-cover" src="assets/productlist-loop.mp4" autoplay muted loop playsinline preload="auto"></video>
 
-<header class="solid">
+<header>
   <a class="brand" href="index.html">OHOUSE</a>
   <nav>
     <a href="shop.html">SHOP</a>
@@ -23,15 +26,17 @@
   </nav>
 </header>
 
-<main class="page">
-  <h2 class="page-title">SHOP</h2>
-  <div class="products" id="product-grid"></div>
-</main>
+<!-- populated from the live Shopify catalog by renderProductSpot() -->
+<a id="beanie-spot" href="#">
+  <span class="spot-label"></span>
+  <img class="front" src="" alt="">
+  <img class="back" src="" alt="">
+</a>
 
 <script src="store.js"></script>
 <script>
 /* keep the background loop alive (autoplay can be blocked) */
-function kickLoop() { const v = document.querySelector('.bg-loop'); if (v && v.paused) v.play().catch(() => {}); }
+function kickLoop() { const v = document.querySelector('.bg-cover'); if (v && v.paused) v.play().catch(() => {}); }
 ['click', 'scroll', 'touchstart', 'keydown'].forEach(ev => addEventListener(ev, kickLoop, { passive: true }));
 setInterval(kickLoop, 2000);
 </script>

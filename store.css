@@ -18,6 +18,15 @@ body {
 a { color: inherit; }
 button { font-family: var(--font); }
 
+/* iOS blocks even muted autoplay in Low Power Mode and paints a big native
+   play glyph over the paused video — hide it everywhere; store.js resumes
+   playback on the first touch instead */
+video::-webkit-media-controls,
+video::-webkit-media-controls-start-playback-button,
+video::-webkit-media-controls-overlay-play-button {
+  display: none !important; -webkit-appearance: none !important; opacity: 0 !important;
+}
+
 /* ---------- header ---------- */
 header {
   position: fixed; top: 0; left: 0; right: 0; z-index: 20;
@@ -45,21 +54,62 @@ header nav a:hover { text-decoration: underline; }
   object-fit: cover; z-index: -2; opacity: .3;
 }
 
-/* ---------- shop grid: name-only tiles ---------- */
-.products { display: grid; grid-template-columns: repeat(3, 1fr); gap: 48px 32px; }
-.product { background: transparent; display: block; text-decoration: none; text-align: center; }
-.product .media { aspect-ratio: 1 / 1; overflow: hidden; background: transparent; }
-.product .media img { width: 100%; height: 100%; object-fit: contain; display: block; filter: grayscale(1); }
-.product .media img.alt { display: none; }
-.product:hover .media img.main { display: none; }
-.product:hover .media img.alt { display: block; }
-.product .name {
-  font-size: 15px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
-  margin-bottom: 14px; line-height: 1.4;
+/* ---------- shop (product list): product over the animation ----------
+   The animation frame is square. The product image inside it was measured
+   at left 31.43% / top 28.56% / size 32.91% of the frame side, which puts
+   the beanie's CENTER at (47.885%, 45.015%) of the frame.
+   The frame is rendered at --side (larger than the viewport) and anchored
+   so that beanie center lands exactly at the center of the screen; the
+   live Shopify image uses the same fractions of --side, so it always sits
+   exactly over the drawn one. Raise --side to zoom in further. */
+/* square artwork anchored 70% down: crops mostly from the top so the
+   bottom of the scene stays in frame (the overlay/hotspot math below and in
+   index.html uses the same 0.7 factor — keep them in sync) */
+.bg-cover {
+  position: fixed; inset: 0; width: 100vw; height: 100vh;
+  object-fit: cover; object-position: center 70%; z-index: -2;
 }
-.product.soldout .media img { opacity: .45; }
-@media (max-width: 900px) { .products { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 560px) { .products { grid-template-columns: 1fr; } }
+body.shop { overflow: hidden; height: 100vh; --side: max(150vmin, 105vw); }
+body.shop .bg-cover {
+  inset: auto;
+  left: calc(50vw - 0.47885 * var(--side));
+  top:  calc(50vh - 0.45015 * var(--side));
+  width: var(--side); height: var(--side);
+  object-fit: cover; object-position: center;
+}
+#beanie-spot {
+  position: fixed; z-index: 5; display: none;
+  left: calc(50vw - 0.16455 * var(--side));
+  top:  calc(50vh - 0.16455 * var(--side));
+  width: calc(0.3291 * var(--side)); height: calc(0.3291 * var(--side));
+  cursor: pointer;
+}
+#beanie-spot.ready { display: block; }
+#beanie-spot img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#beanie-spot img.back { visibility: hidden; transform: scale(1.04); /* covers the drawn edges */ }
+#beanie-spot:hover img.back, #beanie-spot:focus-visible img.back { visibility: visible; }
+/* product title floating just above the product — kept small so the
+   product image stays the center of attention */
+#beanie-spot .spot-label {
+  display: block; position: fixed;
+  top: max(64px, calc(50vh - 0.16455 * var(--side) - 6.5vmin));
+  left: 50vw; transform: translateX(-50%);
+  font-size: clamp(13px, 2.4vmin, 22px); font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--black); white-space: nowrap; z-index: 6;
+  text-shadow: 0 0 14px var(--white), 0 0 8px var(--white), 0 0 4px var(--white);
+}
+
+/* ---------- route transitions: door video (from home) + fade veil ---------- */
+#route-transition {
+  position: fixed; inset: 0; width: 100vw; height: 100vh;
+  object-fit: cover; object-position: center 70%; z-index: 200; background: var(--white);
+}
+#fade-veil {
+  position: fixed; inset: 0; background: var(--white);
+  opacity: 0; pointer-events: none;
+  transition: opacity .28s ease; z-index: 200;
+}
+#fade-veil.on { opacity: 1; pointer-events: auto; }
 
 /* ---------- buttons ---------- */
 .buy {
@@ -71,14 +121,34 @@ header nav a:hover { text-decoration: underline; }
 .buy:disabled, .buy:disabled:hover { background: var(--grey-line); border-color: var(--grey-line); color: var(--grey-mid); cursor: default; }
 
 /* ---------- contact page ---------- */
-#contact-page .mail { font-size: clamp(22px, 3.4vw, 38px); font-weight: 500; text-decoration: none; }
-#contact-page .mail:hover { text-decoration: underline; }
 #contact-page .legal { margin-top: 48px; font-size: 11px; color: var(--grey-mid); }
+#contact-form { max-width: 560px; }
+#contact-form label {
+  display: block; font-size: 11px; font-weight: 700; letter-spacing: .08em;
+  margin-bottom: 18px;
+}
+#contact-form .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+@media (max-width: 480px) { #contact-form .row2 { grid-template-columns: 1fr; } }
+#contact-form input, #contact-form textarea {
+  display: block; width: 100%; margin-top: 6px;
+  padding: 12px 14px; font-family: var(--font); font-size: 14px;
+  border: 1px solid var(--black); border-radius: 8px; outline: none;
+  background: var(--white); resize: vertical;
+}
+#contact-form input:focus, #contact-form textarea:focus { box-shadow: 2px 3px 0 rgba(17,17,17,.15); }
+#contact-form input.err, #contact-form textarea.err { border-color: #c0392b; border-width: 2px; }
+#contact-form .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+#contact-form .buy { font-size: 12px; padding: 14px 40px; }
+#contact-msg { margin-top: 16px; font-size: 13px; min-height: 18px; }
+#contact-msg.good { color: #1e7d32; }
+#contact-msg.bad { color: #c0392b; }
+#contact-page .mail-alt { margin-top: 26px; font-size: 12px; color: var(--grey-mid); }
+#contact-page .mail-alt a { color: inherit; }
 
 /* ---------- product detail ---------- */
 #bg-video {
   position: fixed; top: 0; right: 0; bottom: 0; left: auto;
-  width: 50vw; height: 100vh;
+  width: 65vw; height: 100vh;
   object-fit: cover; z-index: -2;
 }
 #bg-wash { position: fixed; inset: 0; z-index: -1; background: rgba(255, 255, 255, 0.5); }
@@ -211,3 +281,33 @@ body.drawer-open #cart-drawer { transform: none; }
 }
 #signup-submit:hover { background: var(--white); color: var(--black); }
 #signup-msg { margin-top: 14px; font-size: 13px; min-height: 18px; }
+
+/* ---------- lock screen: COMING SOON over the main animation ---------- */
+body.locked { overflow: hidden; height: 100vh; }
+#lock-screen { position: fixed; inset: 0; z-index: 300; background: var(--white); }
+#lock-screen video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: center 70%;
+}
+#lock-screen .lock-wash { position: absolute; inset: 0; background: rgba(255,255,255,.55); }
+#lock-screen .lock-inner {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(430px, 88vw); text-align: center;
+}
+#lock-screen h1 { font-size: clamp(40px, 7vw, 72px); font-weight: 700; letter-spacing: .02em; line-height: 1; }
+#lock-screen .coming { margin-top: 8px; font-size: clamp(15px, 2vw, 20px); letter-spacing: .12em; font-weight: 700; }
+#lock-screen p { margin: 20px 0 14px; font-size: 13px; color: var(--grey-mid); }
+#lock-screen form { display: flex; gap: 10px; }
+#lock-screen form input {
+  flex: 1; min-width: 0; padding: 12px 14px; font-family: var(--font); font-size: 14px;
+  border: 1px solid var(--black); border-radius: 8px; outline: none; background: var(--white);
+}
+#lock-screen form button {
+  padding: 12px 20px; background: var(--black); color: var(--white);
+  border: 1px solid var(--black); border-radius: 8px; cursor: pointer;
+  font-size: 12px; font-weight: 700; letter-spacing: .06em;
+}
+#lock-screen form button:hover { background: var(--white); color: var(--black); }
+#lock-screen #lock-pass { margin-top: 26px; }
+#lock-screen #lock-pass input { border-color: var(--grey-mid); }
+#lock-screen .lock-msg { margin-top: 10px; font-size: 13px; min-height: 18px; }

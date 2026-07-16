@@ -1,64 +1,28 @@
 /* OHOUSE shared store logic: live Shopify catalog, persistent cart,
-   slide-out cart drawer, email signup popup.
+   slide-out cart drawer, email signup popup, door-open route transitions,
+   Shopify-tied "coming soon" lock screen.
    ————————————————————————————————————————————————————————————————
-   Catalog loads live from the Shopify Storefront API (public token).
+   Catalog loads live from the Shopify Storefront API (public token) —
+   titles, prices, descriptions and every image come from Shopify, so
+   admin changes show up here without code changes.
    Checkout hands the cart to Shopify's hosted checkout via cart permalink.
-   Newsletter signup creates a SUBSCRIBED customer via the Storefront API. */
+   Newsletter signup creates a SUBSCRIBED customer via the Storefront API.
+   Lock screen mirrors Online Store → Preferences → password protection. */
 
 const SHOPIFY_DOMAIN = 'by1rr0-yf.myshopify.com';
 const STOREFRONT_TOKEN = '7bbfe1c0cf0bfbd15d38274986b08bc3'; /* Headless app public access token */
 const STOREFRONT_API = `https://${SHOPIFY_DOMAIN}/api/2025-01/graphql.json`;
 
-const FALLBACK_CATALOG = {
-  'dog-girl-tee': {
-    name: 'Dog Girl Tee', price: 45, variantId: '46033021141071',
-    img: 'assets/dog-on-head-girl.png',
-    imgs: ['assets/dog-on-head-girl.png', 'assets/peace-sign.png', 'assets/weightlifter.png'],
-    desc: 'Hand-drawn dog girl print on a heavyweight cotton tee. 240gsm combed cotton, unisex boxy fit, water-based screen print.'
-  },
-  'golfer-cat-crewneck': {
-    name: 'Golfer & Cat Crewneck', price: 75, variantId: '46033021337679',
-    img: 'assets/golfer-and-cat.png',
-    imgs: ['assets/golfer-and-cat.png', 'assets/two-people-talking.png', 'assets/pixel-cigarette.png'],
-    desc: 'Golfer and cat ink-stamp print on a heavyweight crewneck. 240gsm combed cotton, unisex boxy fit, water-based screen print.'
-  },
-  'peace-tee': {
-    name: 'Peace Tee', price: 45, variantId: '46033021534287',
-    img: 'assets/peace-sign.png',
-    imgs: ['assets/peace-sign.png', 'assets/dog-on-head-girl.png', 'assets/golfer-and-cat.png'],
-    desc: 'Peace-sign character print on a heavyweight cotton tee. 240gsm combed cotton, unisex boxy fit, water-based screen print.'
-  },
-  'talkers-hoodie': {
-    name: 'Talkers Hoodie', price: 95, variantId: '46033021730895',
-    img: 'assets/two-people-talking.png',
-    imgs: ['assets/two-people-talking.png', 'assets/pixel-cigarette.png', 'assets/weightlifter.png'],
-    desc: 'Two friends in conversation — ballpoint pen sketch on a heavy hoodie. 240gsm combed cotton, unisex boxy fit, water-based screen print.'
-  },
-  'lifter-tee': {
-    name: 'Lifter Tee', price: 45, variantId: '46033022124111',
-    img: 'assets/weightlifter.png',
-    imgs: ['assets/weightlifter.png', 'assets/dog-on-head-girl.png', 'assets/peace-sign.png'],
-    desc: 'Grumpy weightlifter marker print on a heavyweight cotton tee. 240gsm combed cotton, unisex boxy fit, water-based screen print.'
-  },
-  'smoke-break-longsleeve': {
-    name: 'Smoke Break Longsleeve', price: 55, variantId: '46033022255183',
-    img: 'assets/pixel-cigarette.png',
-    imgs: ['assets/pixel-cigarette.png', 'assets/golfer-and-cat.png', 'assets/two-people-talking.png'],
-    desc: 'Pixel cigarette print on a heavyweight longsleeve. 240gsm combed cotton, unisex boxy fit, water-based screen print.'
-  }
-};
+let CATALOG = {};
 
-let CATALOG = FALLBACK_CATALOG;
-
-/* fetch live products from Shopify Storefront API; fall back silently */
+/* fetch live products from Shopify Storefront API */
 const catalogReady = (async () => {
-  if (!STOREFRONT_TOKEN) return;
   try {
     const query = `{
       products(first: 50, query: "vendor:OHOUSE") {
         nodes {
           handle title description
-          images(first: 3) { nodes { url } }
+          images(first: 10) { nodes { url } }
           variants(first: 1) { nodes { id price { amount } availableForSale } }
         }
       }
@@ -75,31 +39,107 @@ const catalogReady = (async () => {
     nodes.forEach(n => {
       const v = n.variants.nodes[0];
       if (!v) return;
-      const imgs = n.images.nodes.map(im => im.url);
-      /* placeholder padding to 3 unique slots until real gallery shots are uploaded */
-      const pool = [...new Set(Object.values(FALLBACK_CATALOG).flatMap(f => f.imgs))];
-      let seed = n.handle.length;
-      while (imgs.length < 3 && pool.length) {
-        const pick = pool[seed % pool.length];
-        seed += 5;
-        if (!imgs.some(u => u.includes(pick.split('/').pop()))) imgs.push(pick);
-      }
       live[n.handle] = {
         name: n.title,
         price: +v.price.amount,
         variantId: v.id.split('/').pop(),
-        img: imgs[0],
-        imgs,
+        img: n.images.nodes.length ? n.images.nodes[0].url : '',
+        imgs: n.images.nodes.map(im => im.url),
         desc: n.description,
         available: v.availableForSale
       };
     });
     CATALOG = live;
-  } catch (e) { /* keep fallback */ }
+  } catch (e) { /* stay empty; pages keep their animations */ }
 })();
 
 const fmtPrice = n => '$' + (Number.isInteger(+n) ? +n : (+n).toFixed(2));
 const isAvailable = p => p && p.available !== false;
+
+/* ---------- route transitions ----------
+   Leaving the home page plays the door-open clip; every other route change
+   is a quick white fade (out on the old page, in on the new one). */
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let transitioning = false;
+
+/* iOS Low Power Mode / data saver blocks muted autoplay (the native play
+   glyph it paints is hidden in store.css) — restart every paused autoplay
+   video on the first gesture and whenever the tab becomes visible again */
+function resumeVideos() {
+  if (REDUCED_MOTION) return;
+  document.querySelectorAll('video[autoplay]').forEach(v => { if (v.paused) v.play().catch(() => {}); });
+}
+['pointerdown', 'touchend', 'keydown'].forEach(ev => addEventListener(ev, resumeVideos, { passive: true }));
+addEventListener('visibilitychange', resumeVideos);
+
+function getVeil() {
+  let v = document.getElementById('fade-veil');
+  if (!v) {
+    v = document.createElement('div');
+    v.id = 'fade-veil';
+    document.body.appendChild(v);
+  }
+  return v;
+}
+
+function transitionTo(href) {
+  if (transitioning) return;
+  if (REDUCED_MOTION) { location.href = href; return; }
+  transitioning = true;
+
+  if (document.body.classList.contains('home')) {
+    const v = document.createElement('video');
+    v.id = 'route-transition';
+    v.src = 'assets/dooropen.mp4';
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    document.body.appendChild(v);
+    let done = false;
+    const go = () => { if (!done) { done = true; location.href = href; } };
+    v.addEventListener('ended', go, { once: true });
+    v.addEventListener('error', go, { once: true });
+    v.play().catch(go);
+    setTimeout(go, 1600); /* cap: never strand the user on the transition */
+    return;
+  }
+
+  const veil = getVeil();
+  requestAnimationFrame(() => veil.classList.add('on'));
+  setTimeout(() => { location.href = href; }, 300);
+}
+
+/* fade the new page in (skip on home, which opens on its animation) */
+function fadeInPage() {
+  if (REDUCED_MOTION || document.body.classList.contains('home')) return;
+  const veil = getVeil();
+  veil.classList.add('on');
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    veil.classList.remove('on');
+    setTimeout(() => veil.remove(), 400);
+  }));
+}
+
+/* back/forward cache restores must not leave a stale veil or door video */
+addEventListener('pageshow', e => {
+  if (!e.persisted) return;
+  transitioning = false;
+  const veil = document.getElementById('fade-veil');
+  if (veil) veil.remove();
+  const rt = document.getElementById('route-transition');
+  if (rt) rt.remove();
+});
+
+/* internal .html links ride the door animation (cart link, new tabs and
+   modified clicks excluded) */
+const INTERNAL_LINK = /^(index|shop|product|contact)\.html/;
+document.addEventListener('click', e => {
+  const a = e.target.closest('a[href]');
+  if (!a || a.id === 'cart-link' || a.target || a.hasAttribute('download')) return;
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+  const href = a.getAttribute('href');
+  if (!INTERNAL_LINK.test(href)) return;
+  e.preventDefault();
+  transitionTo(href);
+});
 
 /* ---------- cart state (localStorage so it survives page changes) ---------- */
 const CART_KEY = 'ohouse-cart';
@@ -207,33 +247,48 @@ function renderCart() {
   }
 }
 
-/* ---------- shop grid (rendered from CATALOG so new products appear) ---------- */
-function renderGrid() {
-  const grid = document.getElementById('product-grid');
-  if (!grid) return;
-  grid.innerHTML = Object.entries(CATALOG).map(([handle, p]) => `
-    <a class="product${isAvailable(p) ? '' : ' soldout'}" href="product.html?handle=${handle}">
-      <div class="name">${p.name}${isAvailable(p) ? '' : ' — SOLD OUT'}</div>
-      <div class="media">
-        <img class="main" src="${(p.imgs || [p.img])[0]}" alt="${p.name} print">
-        <img class="alt" src="${(p.imgs || [p.img])[1] || (p.imgs || [p.img])[0]}" alt="${p.name} alternate view">
-      </div>
-    </a>`).join('');
+/* ---------- product list page: the product sits over the animation ----------
+   The productlist animation embeds the product's own Shopify image, uniformly
+   scaled. Measured mapping of the full product image into the square frame:
+   left 31.43%, top 28.56%, size 32.91% of the frame side. store.css renders
+   the frame at --side, anchored so the product's center is the center of the
+   screen, and positions #beanie-spot with the same fractions of --side, so
+   the live Shopify image always sits exactly over the drawn one. */
+function renderProductSpot() {
+  const spot = document.getElementById('beanie-spot');
+  if (!spot) return;
+  const entry = Object.entries(CATALOG)[0];
+  if (!entry) return;
+  const [handle, p] = entry;
+  const imgs = p.imgs && p.imgs.length ? p.imgs : [p.img];
+  spot.href = `product.html?handle=${handle}`;
+  spot.setAttribute('aria-label', p.name);
+  spot.querySelector('.spot-label').textContent = p.name;
+  spot.querySelector('img.front').src = imgs[0];
+  spot.querySelector('img.front').alt = p.name;
+  spot.querySelector('img.back').src = imgs[1] || imgs[0];
+  spot.querySelector('img.back').alt = `${p.name} — alternate view`;
+  spot.classList.add('ready');
 }
 
 /* ---------- email signup (Shopify Storefront customerCreate) ---------- */
-const SIGNUP_KEY = 'ohouse-signup-done';
+/* v2: the v1 key could be set forever by a single stray tap on the backdrop
+   (e.g. tapping the screen to start the animation on iOS) */
+const SIGNUP_KEY = 'ohouse-signup-done-v2';
 function maybeShowSignup() {
-  try { if (localStorage.getItem(SIGNUP_KEY)) return; } catch (e) {}
+  if (document.getElementById('lock-screen')) return; /* lock page has its own field */
+  try { if (localStorage.getItem(SIGNUP_KEY) || sessionStorage.getItem(SIGNUP_KEY)) return; } catch (e) {}
   setTimeout(() => document.getElementById('signup-overlay').classList.add('open'), 600);
 }
-function dismissSignup() {
+/* pass persist=false for backdrop taps: hide for this session only, so an
+   accidental tap doesn't suppress the popup forever */
+function dismissSignup(persist) {
   document.getElementById('signup-overlay').classList.remove('open');
-  try { localStorage.setItem(SIGNUP_KEY, '1'); } catch (e) {}
+  const store = persist === false ? sessionStorage : localStorage;
+  try { store.setItem(SIGNUP_KEY, '1'); } catch (e) {}
 }
-async function submitSignup(email) {
-  const msg = document.getElementById('signup-msg');
-  msg.textContent = '…';
+async function submitSignup(email, msgEl, onDone) {
+  msgEl.textContent = '…';
   const pass = 'ohs-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   try {
     const r = await fetch(STOREFRONT_API, {
@@ -249,20 +304,93 @@ async function submitSignup(email) {
     const j = await r.json();
     const errs = j.data && j.data.customerCreate && j.data.customerCreate.customerUserErrors || [];
     if (errs.length && errs[0].code !== 'TAKEN') {
-      msg.textContent = errs[0].message || 'Something went wrong — try again.';
+      msgEl.textContent = errs[0].message || 'Something went wrong — try again.';
       return;
     }
     /* TAKEN means the email already exists — treat as subscribed */
-    msg.textContent = 'WELCOME, FRIEND. ✓';
-    setTimeout(dismissSignup, 1600);
+    msgEl.textContent = 'WELCOME, FRIEND. ✓';
+    if (onDone) setTimeout(onDone, 1600);
   } catch (e) {
-    msg.textContent = 'Network hiccup — try again.';
+    msgEl.textContent = 'Network hiccup — try again.';
   }
+}
+
+/* ---------- lock screen (mirrors Shopify password protection) ----------
+   /api/lock-status checks whether the myshopify storefront is password
+   protected; /api/unlock validates a password attempt against Shopify.
+   Toggle + password both live in Shopify admin (Online Store → Preferences). */
+const UNLOCK_KEY = 'ohouse-unlocked';
+function lockActive() { return !!document.getElementById('lock-screen'); }
+
+function showLock() {
+  if (lockActive()) return;
+  document.body.insertAdjacentHTML('beforeend', `
+  <div id="lock-screen">
+    <video src="assets/station-loop.mp4" autoplay muted loop playsinline></video>
+    <div class="lock-wash"></div>
+    <div class="lock-inner">
+      <h1>OHOUSE</h1>
+      <div class="coming">COMING SOON.</div>
+      <p>friends get first dibs — join the list.</p>
+      <form id="lock-signup">
+        <input type="email" required placeholder="your@email.com" aria-label="Email address">
+        <button type="submit">JOIN</button>
+      </form>
+      <div class="lock-msg" id="lock-signup-msg"></div>
+      <form id="lock-pass">
+        <input type="password" required placeholder="password" aria-label="Password">
+        <button type="submit">ENTER</button>
+      </form>
+      <div class="lock-msg" id="lock-pass-msg"></div>
+    </div>
+  </div>`);
+  document.body.classList.add('locked');
+
+  document.getElementById('lock-signup').addEventListener('submit', e => {
+    e.preventDefault();
+    submitSignup(e.target.querySelector('input').value.trim(), document.getElementById('lock-signup-msg'));
+  });
+  document.getElementById('lock-pass').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msg = document.getElementById('lock-pass-msg');
+    msg.textContent = '…';
+    try {
+      const r = await fetch('/api/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: e.target.querySelector('input').value })
+      });
+      const j = await r.json();
+      if (j.ok) {
+        try { sessionStorage.setItem(UNLOCK_KEY, '1'); } catch (err) {}
+        document.getElementById('lock-screen').remove();
+        document.body.classList.remove('locked');
+        maybeShowSignup();
+      } else {
+        msg.textContent = 'WRONG PASSWORD — TRY AGAIN.';
+      }
+    } catch (err) {
+      msg.textContent = 'Network hiccup — try again.';
+    }
+  });
+}
+
+async function checkLock() {
+  let unlocked = false;
+  try { unlocked = sessionStorage.getItem(UNLOCK_KEY) === '1'; } catch (e) {}
+  if (unlocked) return;
+  try {
+    const r = await fetch('/api/lock-status');
+    const j = await r.json();
+    if (j.locked) showLock();
+  } catch (e) { /* no /api locally — site stays open */ }
 }
 
 /* ---------- wiring ---------- */
 document.addEventListener('DOMContentLoaded', async () => {
+  fadeInPage();
   injectChrome();
+  checkLock();
 
   const linkEl = document.getElementById('cart-link');
   if (linkEl) linkEl.addEventListener('click', e => { e.preventDefault(); openDrawer(); });
@@ -301,21 +429,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   /* signup popup */
   document.getElementById('signup-close').addEventListener('click', dismissSignup);
   document.getElementById('signup-overlay').addEventListener('click', e => {
-    if (e.target.id === 'signup-overlay') dismissSignup();
+    if (e.target.id === 'signup-overlay') dismissSignup(false);
   });
   document.getElementById('signup-form').addEventListener('submit', e => {
     e.preventDefault();
-    submitSignup(document.getElementById('signup-email').value.trim());
+    submitSignup(document.getElementById('signup-email').value.trim(),
+                 document.getElementById('signup-msg'), dismissSignup);
   });
-  maybeShowSignup();
+  setTimeout(maybeShowSignup, 900); /* after lock check has had a beat */
 
-  renderGrid();      /* instant paint from fallback */
   renderCart();
   await catalogReady;
   /* drop cart lines whose product no longer exists, or checkout would throw */
   const pruned = cart.filter(i => CATALOG[i.handle]);
   if (pruned.length !== cart.length) { cart = pruned; saveCart(); }
-  renderGrid();      /* re-paint with live Shopify data */
+  renderProductSpot();
   renderCart();
   document.dispatchEvent(new Event('catalog-ready'));
 });

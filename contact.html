@@ -25,7 +25,32 @@
 
 <main class="page" id="contact-page">
   <h2 class="page-title">CONTACT</h2>
-  <a class="mail" href="mailto:hello@ohouse.com">HELLO@OHOUSE.COM</a>
+
+  <form id="contact-form" novalidate>
+    <div class="row2">
+      <label>FIRST NAME
+        <input name="firstName" autocomplete="given-name" required>
+      </label>
+      <label>LAST NAME
+        <input name="lastName" autocomplete="family-name" required>
+      </label>
+    </div>
+    <label>EMAIL ADDRESS
+      <input type="email" name="email" autocomplete="email" required>
+    </label>
+    <label>SUBJECT
+      <input name="subject" required>
+    </label>
+    <label>MESSAGE
+      <textarea name="message" rows="6" required></textarea>
+    </label>
+    <!-- honeypot: bots fill it, humans never see it -->
+    <input type="text" name="_honey" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <button class="buy" id="contact-submit" type="submit">SUBMIT</button>
+    <div id="contact-msg" role="status"></div>
+  </form>
+  <p class="mail-alt">or write to us directly: <a href="mailto:shuang12212024@gmail.com">shuang12212024@gmail.com</a></p>
+
   <div class="legal">© 2026 OHOUSE</div>
 </main>
 
@@ -34,6 +59,126 @@
 function kickLoop() { const v = document.querySelector('.bg-loop'); if (v && v.paused) v.play().catch(() => {}); }
 ['click', 'scroll', 'touchstart', 'keydown'].forEach(ev => addEventListener(ev, kickLoop, { passive: true }));
 setInterval(kickLoop, 2000);
+
+/* ---------- contact form → email to the store owner ----------
+   Primary: Web3Forms AJAX (free, real success/failure response). Set
+   WEB3FORMS_KEY to the access key for shuang12212024@gmail.com from
+   https://web3forms.com (the key is public by design).
+   Fallback (key not set): post Shopify's native contact form into a hidden
+   iframe — the store's notification email is the same address. Shopify only
+   accepts these posts when admin → Online Store → Preferences → spam
+   protection on forms is turned off. */
+const WEB3FORMS_KEY = '79401ee3-d732-4035-a461-9ae046accf46';
+const SHOP_CONTACT = 'https://by1rr0-yf.myshopify.com/contact';
+const form = document.getElementById('contact-form');
+const msgEl = document.getElementById('contact-msg');
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function setErr(input, on) { input.classList.toggle('err', on); }
+
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = form.elements;
+  let bad = false;
+  ['firstName', 'lastName', 'email', 'subject', 'message'].forEach(n => {
+    const empty = !f[n].value.trim();
+    const invalid = n === 'email' ? !EMAIL_RE.test(f[n].value.trim()) : empty;
+    setErr(f[n], empty || invalid);
+    if (empty || invalid) bad = true;
+  });
+  if (bad) { msgEl.textContent = 'PLEASE FILL IN THE MARKED FIELDS.'; msgEl.className = 'bad'; return; }
+  if (f._honey.value) { /* bot: pretend success, send nothing */
+    msgEl.textContent = 'MESSAGE SENT. ✓'; msgEl.className = 'good'; form.reset(); return;
+  }
+
+  const btn = document.getElementById('contact-submit');
+  btn.disabled = true;
+  msgEl.textContent = 'SENDING…'; msgEl.className = '';
+
+  if (WEB3FORMS_KEY) {
+    try {
+      const r = await fetch('https://api.web3forms.com/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          access_key: WEB3FORMS_KEY,
+          subject: `OHOUSE contact: ${f.subject.value.trim()}`,
+          name: `${f.firstName.value.trim()} ${f.lastName.value.trim()}`,
+          email: f.email.value.trim(),
+          message: f.message.value.trim(),
+          botcheck: ''
+        })
+      });
+      const j = await r.json();
+      if (j.success) {
+        msgEl.textContent = 'MESSAGE SENT — WE\'LL GET BACK TO YOU SOON. ✓';
+        msgEl.className = 'good';
+        form.reset();
+      } else {
+        msgEl.textContent = 'SOMETHING WENT WRONG — TRY AGAIN OR EMAIL US DIRECTLY.';
+        msgEl.className = 'bad';
+      }
+    } catch (err) {
+      msgEl.textContent = 'NETWORK HICCUP — TRY AGAIN.';
+      msgEl.className = 'bad';
+    }
+    btn.disabled = false;
+    return;
+  }
+
+  /* fallback: build a real form post into a hidden iframe (cross-origin
+     fetch is blocked by CORS; a form post is not) */
+  let sink = document.getElementById('contact-sink');
+  if (!sink) {
+    sink = document.createElement('iframe');
+    sink.id = 'contact-sink';
+    sink.name = 'contact-sink';
+    sink.style.display = 'none';
+    document.body.appendChild(sink);
+  }
+  const relay = document.createElement('form');
+  relay.action = SHOP_CONTACT;
+  relay.method = 'POST';
+  relay.target = 'contact-sink';
+  relay.style.display = 'none';
+  const fields = {
+    form_type: 'contact',
+    utf8: '✓',
+    'contact[Name]': `${f.firstName.value.trim()} ${f.lastName.value.trim()}`,
+    'contact[email]': f.email.value.trim(),
+    'contact[Subject]': f.subject.value.trim(),
+    'contact[body]': `Subject: ${f.subject.value.trim()}\n\n${f.message.value.trim()}`
+  };
+  Object.entries(fields).forEach(([k, v]) => {
+    const i = document.createElement('input');
+    i.type = 'hidden'; i.name = k; i.value = v;
+    relay.appendChild(i);
+  });
+  document.body.appendChild(relay);
+
+  let settled = false;
+  const done = ok => {
+    if (settled) return;
+    settled = true;
+    relay.remove();
+    btn.disabled = false;
+    if (ok) {
+      msgEl.textContent = 'MESSAGE SENT — WE\'LL GET BACK TO YOU SOON. ✓';
+      msgEl.className = 'good';
+      form.reset();
+    } else {
+      msgEl.textContent = 'SOMETHING WENT WRONG — TRY AGAIN OR EMAIL US DIRECTLY.';
+      msgEl.className = 'bad';
+    }
+  };
+  /* the iframe firing 'load' means Shopify answered the post */
+  sink.addEventListener('load', () => done(true), { once: true });
+  setTimeout(() => done(false), 15000);
+  relay.submit();
+});
+
+/* clear error highlight as soon as the field is corrected */
+form.addEventListener('input', e => { if (e.target.classList) setErr(e.target, false); });
 </script>
 </body>
 </html>

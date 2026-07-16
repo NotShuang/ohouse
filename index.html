@@ -9,15 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Gloria+Hallelujah&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="store.css">
-<style>
-/* home background stack: resting loop + one-shot exit clip */
-#rest-video, #play-video {
-  position: fixed; inset: 0; width: 100vw; height: 100vh;
-  object-fit: cover; z-index: -2;
-}
-#play-video { z-index: -1; visibility: hidden; }
-#play-video.active { visibility: visible; }
-</style>
+<link rel="preload" as="video" href="assets/dooropen.mp4" type="video/mp4">
 </head>
 <body class="home">
 
@@ -30,10 +22,9 @@
   </nav>
 </header>
 
-<!-- resting state: mainpagestatic loops forever; on first scroll, outside.mp4
-     plays through once (normal playback, uninterruptible) then we go to the shop -->
-<video id="rest-video" src="assets/mainpage-loop.mp4" autoplay muted loop playsinline preload="auto"></video>
-<video id="play-video" src="assets/outside-loop.mp4" muted playsinline preload="auto"></video>
+<!-- resting state: the station scene loops forever; scrolling (or the door
+     hotspot / SHOP link) plays the door-open transition, then the shop -->
+<video id="rest-video" class="bg-cover" src="assets/station-loop.mp4" autoplay muted loop playsinline preload="auto"></video>
 
 <!-- hover hotspots over the artwork (positioned by JS to track the drawn square);
      labels are cursor-following tooltips -->
@@ -49,65 +40,42 @@
 <script src="store.js"></script>
 <script>
 const restV = document.getElementById('rest-video');
-const playV = document.getElementById('play-video');
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* keep the resting loop alive (autoplay can be blocked) */
-function kickRest() { if (!REDUCED && restV.paused && !triggered) restV.play().catch(() => {}); }
+function kickRest() { if (!REDUCED && restV.paused && !transitioning) restV.play().catch(() => {}); }
 ['click', 'touchstart', 'keydown', 'mousemove'].forEach(ev => addEventListener(ev, kickRest, { passive: true }));
 setInterval(kickRest, 2000);
 
-/* ---------- scroll → play outside.mp4 once → shop ---------- */
-let triggered = false, navigated = false;
-function goShop() { if (navigated) return; navigated = true; location.href = 'shop.html'; }
-function trigger() {
-  if (triggered || REDUCED) { if (REDUCED) goShop(); return; }
-  triggered = true;
-  playV.classList.add('active');
-  restV.pause();
-  playV.currentTime = 0;
-  playV.addEventListener('ended', goShop, { once: true });
-  playV.play().catch(() => { /* if playback is blocked, don't strand the user */ setTimeout(goShop, 1200); });
-  /* safety net: navigate even if 'ended' never fires; wait for real duration
-     so a slow metadata load can't cut the clip short */
-  const arm = () => setTimeout(goShop, playV.duration * 1000 + 1600);
-  if (isFinite(playV.duration) && playV.duration) arm();
-  else playV.addEventListener('loadedmetadata', arm, { once: true });
-  setTimeout(goShop, 10000); /* absolute cap if metadata never arrives */
-}
-
-/* SHOP nav link plays the same exit animation before navigating */
-document.querySelectorAll('nav a[href="shop.html"]').forEach(a => {
-  a.addEventListener('click', e => { e.preventDefault(); trigger(); });
-});
-
-/* gestures aimed at an open drawer/popup must not start the exit animation */
+/* gestures aimed at an open drawer/popup/lock screen must not start the exit */
 function overlayOpen() {
   const signup = document.getElementById('signup-overlay');
   return document.body.classList.contains('drawer-open') ||
+         document.body.classList.contains('locked') ||
          (signup && signup.classList.contains('open'));
 }
+function exitToShop() { if (!overlayOpen()) transitionTo('shop.html'); }
 
-addEventListener('wheel', e => { if (e.deltaY > 0 && !overlayOpen()) trigger(); }, { passive: true });
+addEventListener('wheel', e => { if (e.deltaY > 0) exitToShop(); }, { passive: true });
 addEventListener('keydown', e => {
   if (overlayOpen() || (e.target.closest && e.target.closest('input, textarea'))) return;
-  if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') trigger();
+  if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') exitToShop();
 });
 let touchY = null;
 addEventListener('touchstart', e => { touchY = e.touches[0].clientY; }, { passive: true });
 addEventListener('touchmove', e => {
-  if (overlayOpen()) return;
-  if (touchY !== null && touchY - e.touches[0].clientY > 24) trigger(); /* swipe up = scroll down */
+  if (touchY !== null && touchY - e.touches[0].clientY > 24) exitToShop(); /* swipe up = scroll down */
 }, { passive: true });
 
 /* ---------- hotspots track the cover-rendered square artwork ---------- */
 const HOTSPOTS = [
-  { el: 'hs-door',   x: 0.17, y: 0.38, w: 0.26, h: 0.50, href: 'shop.html' },
-  { el: 'hs-person', x: 0.42, y: 0.60, w: 0.21, h: 0.30, href: 'contact.html' }
+  { el: 'hs-door',   x: 0.18, y: 0.38, w: 0.25, h: 0.48, href: 'shop.html' },
+  { el: 'hs-person', x: 0.46, y: 0.60, w: 0.38, h: 0.26, href: 'contact.html' }
 ];
 function positionHotspots() {
+  /* matches .bg-cover's object-position: center 70% (see store.css) */
   const side = Math.max(innerWidth, innerHeight);
-  const ox = (innerWidth - side) / 2, oy = (innerHeight - side) / 2;
+  const ox = (innerWidth - side) / 2, oy = (innerHeight - side) * 0.7;
   HOTSPOTS.forEach(h => {
     const el = document.getElementById(h.el);
     el.style.left = (ox + h.x * side) + 'px';
@@ -119,10 +87,7 @@ function positionHotspots() {
 HOTSPOTS.forEach(h => {
   const el = document.getElementById(h.el);
   const sign = el.querySelector('.sign');
-  el.addEventListener('click', () => {
-    if (h.href === 'shop.html') trigger();
-    else location.href = h.href;
-  });
+  el.addEventListener('click', () => { if (!overlayOpen()) transitionTo(h.href); });
   /* tooltip follows the cursor, offset to the bottom-right */
   el.addEventListener('mousemove', e => {
     sign.style.left = (e.clientX + 14) + 'px';
