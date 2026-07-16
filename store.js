@@ -251,9 +251,10 @@ function renderCart() {
    The productlist animation embeds the product's own Shopify image, uniformly
    scaled. Measured mapping of the full product image into the square frame:
    left 31.43%, top 28.56%, size 32.91% of the frame side. store.css renders
-   the frame at --side, anchored so the product's center is the center of the
-   screen, and positions #beanie-spot with the same fractions of --side, so
-   the live Shopify image always sits exactly over the drawn one. */
+   the frame at --side, bottom edge on the bottom of the screen and the
+   product's center at 50vw, and positions #beanie-spot with the same
+   fractions of --side, so the live Shopify image always sits exactly over
+   the drawn one. */
 function renderProductSpot() {
   const spot = document.getElementById('beanie-spot');
   if (!spot) return;
@@ -269,7 +270,21 @@ function renderProductSpot() {
   spot.querySelector('img.back').src = imgs[1] || imgs[0];
   spot.querySelector('img.back').alt = `${p.name} — alternate view`;
   spot.classList.add('ready');
+  fitSpotLabel();
 }
+
+/* scale the floating product name so the text is exactly as wide as the
+   product image below it (re-fit on resize and once the webfont is in) */
+function fitSpotLabel() {
+  const spot = document.getElementById('beanie-spot');
+  if (!spot || !spot.classList.contains('ready')) return;
+  const label = spot.querySelector('.spot-label');
+  label.style.fontSize = '100px';
+  const w = label.getBoundingClientRect().width;
+  if (w) label.style.fontSize = (100 * spot.getBoundingClientRect().width / w) + 'px';
+}
+addEventListener('resize', fitSpotLabel);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitSpotLabel);
 
 /* ---------- email signup (Shopify Storefront customerCreate) ---------- */
 /* v2: the v1 key could be set forever by a single stray tap on the backdrop

@@ -56,12 +56,16 @@ header nav a:hover { text-decoration: underline; }
 
 /* ---------- shop (product list): product over the animation ----------
    The animation frame is square. The product image inside it was measured
-   at left 31.43% / top 28.56% / size 32.91% of the frame side, which puts
-   the beanie's CENTER at (47.885%, 45.015%) of the frame.
-   The frame is rendered at --side (larger than the viewport) and anchored
-   so that beanie center lands exactly at the center of the screen; the
-   live Shopify image uses the same fractions of --side, so it always sits
-   exactly over the drawn one. Raise --side to zoom in further. */
+   at left 31.43% / top 28.56% / size 32.91% of the frame side.
+   The frame is rendered at --side with its BOTTOM edge on the bottom of the
+   screen (so the scene below the product is never cut off) and shifted
+   sideways so the product's center sits at 50vw. --side is picked so the
+   product's top lands 150px from the top of the screen (headroom for the
+   name): (100vh - 150px) / 0.7144, where 0.7144 = 1 - 0.2856 is the
+   product-top fraction measured from the frame's bottom. On narrow/portrait
+   screens it is capped at 150vw so the sides of the scene aren't cropped
+   away entirely. The live Shopify image uses the same fractions of --side,
+   so it always sits exactly over the drawn one. */
 /* square artwork anchored 70% down: crops mostly from the top so the
    bottom of the scene stays in frame (the overlay/hotspot math below and in
    index.html uses the same 0.7 factor — keep them in sync) */
@@ -69,18 +73,18 @@ header nav a:hover { text-decoration: underline; }
   position: fixed; inset: 0; width: 100vw; height: 100vh;
   object-fit: cover; object-position: center 70%; z-index: -2;
 }
-body.shop { overflow: hidden; height: 100vh; --side: max(150vmin, 105vw); }
+body.shop { overflow: hidden; height: 100vh; --side: min(calc((100vh - 150px) / 0.7144), 150vw); }
 body.shop .bg-cover {
   inset: auto;
   left: calc(50vw - 0.47885 * var(--side));
-  top:  calc(50vh - 0.45015 * var(--side));
+  bottom: 0;
   width: var(--side); height: var(--side);
   object-fit: cover; object-position: center;
 }
 #beanie-spot {
   position: fixed; z-index: 5; display: none;
   left: calc(50vw - 0.16455 * var(--side));
-  top:  calc(50vh - 0.16455 * var(--side));
+  bottom: calc(0.3853 * var(--side)); /* 1 - 0.6147 (product bottom fraction) */
   width: calc(0.3291 * var(--side)); height: calc(0.3291 * var(--side));
   cursor: pointer;
 }
@@ -88,13 +92,13 @@ body.shop .bg-cover {
 #beanie-spot img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #beanie-spot img.back { visibility: hidden; transform: scale(1.04); /* covers the drawn edges */ }
 #beanie-spot:hover img.back, #beanie-spot:focus-visible img.back { visibility: visible; }
-/* product title floating just above the product — kept small so the
-   product image stays the center of attention */
+/* product title floating just above the product; fitSpotLabel() in store.js
+   scales the font so the text is exactly as wide as the product image */
 #beanie-spot .spot-label {
   display: block; position: fixed;
-  top: max(64px, calc(50vh - 0.16455 * var(--side) - 6.5vmin));
+  bottom: calc(0.7144 * var(--side) + 10px); /* 10px above the product's top */
   left: 50vw; transform: translateX(-50%);
-  font-size: clamp(13px, 2.4vmin, 22px); font-weight: 700; letter-spacing: .06em;
+  font-size: 24px; line-height: 1.15; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase; color: var(--black); white-space: nowrap; z-index: 6;
   text-shadow: 0 0 14px var(--white), 0 0 8px var(--white), 0 0 4px var(--white);
 }
