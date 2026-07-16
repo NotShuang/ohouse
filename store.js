@@ -273,15 +273,16 @@ function renderProductSpot() {
   fitSpotLabel();
 }
 
-/* scale the floating product name so the text is exactly as wide as the
-   product image below it (re-fit on resize and once the webfont is in) */
+/* scale the floating product name relative to the width of the product
+   image below it (re-fit on resize and once the webfont is in) */
+const SPOT_LABEL_WIDTH = 0.7; /* text width as a fraction of the product width */
 function fitSpotLabel() {
   const spot = document.getElementById('beanie-spot');
   if (!spot || !spot.classList.contains('ready')) return;
   const label = spot.querySelector('.spot-label');
   label.style.fontSize = '100px';
   const w = label.getBoundingClientRect().width;
-  if (w) label.style.fontSize = (100 * spot.getBoundingClientRect().width / w) + 'px';
+  if (w) label.style.fontSize = (100 * SPOT_LABEL_WIDTH * spot.getBoundingClientRect().width / w) + 'px';
 }
 addEventListener('resize', fitSpotLabel);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitSpotLabel);
