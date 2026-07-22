@@ -54,51 +54,52 @@ header nav a:hover { text-decoration: underline; }
   object-fit: cover; z-index: -2; opacity: .3;
 }
 
-/* ---------- shop (product list): product over the animation ----------
-   The animation frame is square. The product image inside it was measured
-   at left 31.43% / top 28.56% / size 32.91% of the frame side.
-   The frame is rendered at --side with its BOTTOM edge on the bottom of the
-   screen (so the scene below the product is never cut off) and shifted
-   sideways so the product's center sits at 50vw. --side is picked so the
-   product's top lands 150px from the top of the screen (headroom for the
-   name): (100vh - 150px) / 0.7144, where 0.7144 = 1 - 0.2856 is the
-   product-top fraction measured from the frame's bottom. On narrow/portrait
-   screens it is capped at 150vw so the sides of the scene aren't cropped
-   away entirely. The live Shopify image uses the same fractions of --side,
-   so it always sits exactly over the drawn one. */
+/* ---------- shop (product list): products over the animation ----------
+   The animation frame is a square scene with both products drawn in place
+   (beanie worn top-left, tee on a hanger at right). The whole square is shown
+   at its natural size, centered in the viewport: --side is the on-screen size
+   of the square (as large as fits — min of viewport width/height) and
+   --sq-left / --sq-top are the square's top-left corner. Each product spot
+   sets --pl / --pt / --pw inline: the product's square placement as fractions
+   of the frame (measured from the frames). The live Shopify image is placed at
+   the same fractions of --side, so it sits exactly over the drawn product. */
 /* square artwork anchored 70% down: crops mostly from the top so the
-   bottom of the scene stays in frame (the overlay/hotspot math below and in
-   index.html uses the same 0.7 factor — keep them in sync) */
+   bottom of the scene stays in frame (used by index.html) */
 .bg-cover {
   position: fixed; inset: 0; width: 100vw; height: 100vh;
   object-fit: cover; object-position: center 70%; z-index: -2;
 }
-body.shop { overflow: hidden; height: 100vh; --side: min(calc((100vh - 150px) / 0.7144), 150vw); }
+body.shop {
+  overflow: hidden; height: 100vh;
+  --side: min(100vw, 135vh);              /* a touch taller than the viewport so it runs flush top-to-bottom (no vertical white), but only ~1/4 of the dog's lower body crops off — not the whole figure. Capped at 100vw so portrait keeps both products in view */
+  --drop: calc(var(--side) * 0.13);       /* lands the square flush with the top of the viewport (no top white); the empty dog-legs area is what falls off the bottom */
+  --sq-left: calc(50vw - var(--side) / 2);
+  --sq-top:  calc(50vh - var(--side) / 2 + var(--drop));
+}
 body.shop .bg-cover {
   inset: auto;
-  left: calc(50vw - 0.47885 * var(--side));
-  bottom: 0;
+  left: var(--sq-left); top: var(--sq-top);
   width: var(--side); height: var(--side);
   object-fit: cover; object-position: center;
 }
-#beanie-spot {
-  position: fixed; z-index: 5; display: none;
-  left: calc(50vw - 0.16455 * var(--side));
-  bottom: calc(0.3853 * var(--side)); /* 1 - 0.6147 (product bottom fraction) */
-  width: calc(0.3291 * var(--side)); height: calc(0.3291 * var(--side));
-  cursor: pointer;
+.product-spot {
+  position: fixed; z-index: 5; display: none; cursor: pointer;
+  left:   calc(var(--sq-left) + var(--pl) * var(--side));
+  top:    calc(var(--sq-top)  + var(--pt) * var(--side));
+  width:  calc(var(--pw) * var(--side));
+  height: calc(var(--pw) * var(--side));
 }
-#beanie-spot.ready { display: block; }
-#beanie-spot img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-#beanie-spot img.back { visibility: hidden; transform: scale(1.04); /* covers the drawn edges */ }
-#beanie-spot:hover img.back, #beanie-spot:focus-visible img.back { visibility: visible; }
-/* product title floating just above the product; fitSpotLabel() in store.js
-   scales the font so the text is a fixed fraction of the product's width */
-#beanie-spot .spot-label {
-  display: block; position: fixed;
-  bottom: calc(0.7144 * var(--side) + 10px); /* 10px above the product's top */
-  left: 50vw; transform: translateX(-50%);
-  font-size: 24px; line-height: 1.15; font-weight: 700; letter-spacing: .06em;
+.product-spot.ready { display: block; }
+.product-spot img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.product-spot img.back { visibility: hidden; transform: scale(1.04); /* covers the drawn edges */ }
+.product-spot:hover img.back, .product-spot:focus-visible img.back { visibility: visible; }
+/* product title floating just above its own product; one consistent size for
+   every spot (a fraction of the scene --side) so both names match regardless
+   of product width or name length */
+.product-spot .spot-label {
+  display: block; position: absolute; left: 50%; bottom: 100%;
+  transform: translateX(-50%); margin-bottom: 10px;
+  font-size: calc(min(100vw, 100vh) * 0.038); line-height: 1.15; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase; color: var(--black); white-space: nowrap; z-index: 6;
   text-shadow: 0 0 14px var(--white), 0 0 8px var(--white), 0 0 4px var(--white);
 }

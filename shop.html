@@ -11,12 +11,12 @@
 </head>
 <body class="shop">
 
-<!-- the product-list animation is bottom-aligned with the screen (the scene
-     below the beanie is never cut off) and centered on the beanie; the live
-     Shopify product image is positioned exactly over the drawn beanie
-     (mapping measured from the animation frames — see store.css body.shop /
-     #beanie-spot) -->
-<video class="bg-cover" src="assets/productlist-loop.mp4" autoplay muted loop playsinline preload="auto"></video>
+<!-- the product-list animation is a square scene showing both products drawn
+     in place (beanie worn top-left, tee on a hanger at right). The square is
+     centered in the viewport at its natural size; each live Shopify product
+     image is positioned exactly over its drawn counterpart (mapping measured
+     from the animation frames — see store.css body.shop / .product-spot) -->
+<video class="bg-cover" src="assets/productlist-2up.mp4" autoplay muted loop playsinline preload="auto"></video>
 
 <header>
   <a class="brand" href="index.html">OHOUSE</a>
@@ -27,8 +27,16 @@
   </nav>
 </header>
 
-<!-- populated from the live Shopify catalog by renderProductSpot() -->
-<a id="beanie-spot" href="#">
+<!-- Both spots populated from the live Shopify catalog by renderProductSpot().
+     --pl/--pt/--pw are the product's square placement as fractions of the
+     animation frame (measured from the frames); store.css turns them into
+     an exact overlay on the drawn product. -->
+<a class="product-spot" id="spot-beanie" href="#" style="--pl:.2206;--pt:.1049;--pw:.3667">
+  <span class="spot-label"></span>
+  <img class="front" src="" alt="">
+  <img class="back" src="" alt="">
+</a>
+<a class="product-spot" id="spot-tee" href="#" style="--pl:.617;--pt:.290;--pw:.290">
   <span class="spot-label"></span>
   <img class="front" src="" alt="">
   <img class="back" src="" alt="">

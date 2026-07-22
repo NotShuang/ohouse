@@ -247,45 +247,39 @@ function renderCart() {
   }
 }
 
-/* ---------- product list page: the product sits over the animation ----------
-   The productlist animation embeds the product's own Shopify image, uniformly
-   scaled. Measured mapping of the full product image into the square frame:
-   left 31.43%, top 28.56%, size 32.91% of the frame side. store.css renders
-   the frame at --side, bottom edge on the bottom of the screen and the
-   product's center at 50vw, and positions #beanie-spot with the same
-   fractions of --side, so the live Shopify image always sits exactly over
-   the drawn one. */
+/* ---------- product list page: the products sit over the animation ----------
+   The productlist animation embeds each product's own Shopify image, uniformly
+   scaled and drawn in place (beanie top-left, tee on a hanger at right). Each
+   spot element carries its square placement inline (--pl/--pt/--pw, fractions
+   of the frame); store.css turns those into an exact overlay on --side, so the
+   live Shopify image always sits exactly over the drawn one. Sourcing (name,
+   price, images, link) is identical for every product — pulled live from the
+   Shopify catalog by handle, nothing hardcoded. */
+const SHOP_SPOTS = [
+  { handle: 'beanie-cap', el: 'spot-beanie' },
+  { handle: 'tee',        el: 'spot-tee' }
+];
 function renderProductSpot() {
-  const spot = document.getElementById('beanie-spot');
-  if (!spot) return;
-  const entry = Object.entries(CATALOG)[0];
-  if (!entry) return;
-  const [handle, p] = entry;
-  const imgs = p.imgs && p.imgs.length ? p.imgs : [p.img];
-  spot.href = `product.html?handle=${handle}`;
-  spot.setAttribute('aria-label', p.name);
-  spot.querySelector('.spot-label').textContent = p.name;
-  spot.querySelector('img.front').src = imgs[0];
-  spot.querySelector('img.front').alt = p.name;
-  spot.querySelector('img.back').src = imgs[1] || imgs[0];
-  spot.querySelector('img.back').alt = `${p.name} — alternate view`;
-  spot.classList.add('ready');
-  fitSpotLabel();
+  SHOP_SPOTS.forEach(({ handle, el }) => {
+    const spot = document.getElementById(el);
+    if (!spot) return;
+    const p = CATALOG[handle];
+    if (!p) return; /* product missing from the live catalog — leave its spot hidden */
+    const imgs = p.imgs && p.imgs.length ? p.imgs : [p.img];
+    spot.href = `product.html?handle=${handle}`;
+    spot.setAttribute('aria-label', p.name);
+    spot.querySelector('.spot-label').textContent = p.name;
+    spot.querySelector('img.front').src = imgs[0];
+    spot.querySelector('img.front').alt = p.name;
+    spot.querySelector('img.back').src = imgs[1] || imgs[0]; /* hover swaps to 2nd image */
+    spot.querySelector('img.back').alt = `${p.name} — alternate view`;
+    spot.classList.add('ready');
+  });
 }
 
-/* scale the floating product name relative to the width of the product
-   image below it (re-fit on resize and once the webfont is in) */
-const SPOT_LABEL_WIDTH = 0.7; /* text width as a fraction of the product width */
-function fitSpotLabel() {
-  const spot = document.getElementById('beanie-spot');
-  if (!spot || !spot.classList.contains('ready')) return;
-  const label = spot.querySelector('.spot-label');
-  label.style.fontSize = '100px';
-  const w = label.getBoundingClientRect().width;
-  if (w) label.style.fontSize = (100 * SPOT_LABEL_WIDTH * spot.getBoundingClientRect().width / w) + 'px';
-}
-addEventListener('resize', fitSpotLabel);
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitSpotLabel);
+/* product names are a fixed, consistent size for every spot (a fraction of the
+   scene --side, set in store.css), so both labels match regardless of product
+   width or name length — no per-product fitting needed */
 
 /* ---------- email signup (Shopify Storefront customerCreate) ---------- */
 /* v2: the v1 key could be set forever by a single stray tap on the backdrop
